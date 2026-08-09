@@ -1,6 +1,7 @@
 export const SAVE_STATES = Object.freeze({
   SAVING: "Saving…",
   SAVED: "Saved",
+  CLEARED: "Local data cleared",
   UNAVAILABLE: "Storage unavailable",
 });
 
@@ -58,9 +59,16 @@ export function createAutosave({
     timer = schedule(flush, delay);
   }
 
+  function reset(state = SAVE_STATES.SAVED) {
+    cancelScheduledSave();
+    dirty = false;
+    setState(state);
+  }
+
   return {
     flush,
     markDirty,
+    reset,
     setState,
     isDirty: () => dirty,
   };

@@ -1,4 +1,15 @@
 import { createAutosave, SAVE_STATES } from "./autosave.js";
+import {
+  MAX_BACKUP_BYTES,
+  backupFilename,
+  createBackup,
+  decodeUtf8,
+  mergeBackupDocument,
+  parseBackup,
+  sanitizeFilename,
+  serializeBackup,
+  titleFromTextFilename,
+} from "./backup.js";
 import { clearEditor, countText, createEditorCommands } from "./editor.js";
 import {
   currentMatchIndex,
@@ -24,7 +35,14 @@ import {
   updateNote,
   updatePreferences,
 } from "./notes.js";
-import { loadNotesDocument, saveNotesDocument } from "./storage.js";
+import {
+  clearPlainJotData,
+  createNotesDocument,
+  loadLastBackupMetadata,
+  loadNotesDocument,
+  saveLastBackupMetadata,
+  saveNotesDocument,
+} from "./storage.js";
 
 const AUTOSAVE_DELAY_MS = 500;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
@@ -36,12 +54,16 @@ const saveState = document.querySelector("#save-state");
 const commandFeedback = document.querySelector("#command-feedback");
 const wordCount = document.querySelector("#word-count");
 const characterCount = document.querySelector("#character-count");
+const backupStatus = document.querySelector("#backup-status");
 const moreButton = document.querySelector("#more-commands");
 const commandMenu = document.querySelector("#command-menu");
 const overflow = document.querySelector(".overflow");
 const insertButton = document.querySelector("#insert-button");
 const insertMenu = document.querySelector("#insert-menu");
 const insertPopup = insertButton.closest(".toolbar-popup");
+const fileButton = document.querySelector("#file-button");
+const fileMenu = document.querySelector("#file-menu");
+const filePopup = fileButton.closest(".toolbar-popup");
 const sidebar = document.querySelector("#notes-sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
@@ -68,6 +90,22 @@ const replaceAllButton = document.querySelector("#replace-all");
 const pickerDialog = document.querySelector("#picker-dialog");
 const pickerDialogTitle = document.querySelector("#picker-dialog-title");
 const characterGrid = document.querySelector("#character-grid");
+const textFileInput = document.querySelector("#text-file-input");
+const backupFileInput = document.querySelector("#backup-file-input");
+const restoreDialog = document.querySelector("#restore-dialog");
+const restoreSummary = document.querySelector("#restore-summary");
+const restoreError = document.querySelector("#restore-error");
+const restoreOptions = document.querySelector("#restore-options");
+const restoreChooseFile = document.querySelector("#restore-choose-file");
+const restoreCancel = document.querySelector("#restore-cancel");
+const restoreDialogClose = document.querySelector("#restore-dialog-close");
+const restoreConfirm = document.querySelector("#restore-confirm");
+const clearDataDialog = document.querySelector("#clear-data-dialog");
+const clearDataSummary = document.querySelector("#clear-data-summary");
+const clearDataError = document.querySelector("#clear-data-error");
+const clearDataCancel = document.querySelector("#clear-data-cancel");
+const clearDataDialogClose = document.querySelector("#clear-data-dialog-close");
+const clearDataConfirm = document.querySelector("#clear-data-confirm");
 const narrowLayout = window.matchMedia(MOBILE_BREAKPOINT);
 const compactToolbar = window.matchMedia(TOOLBAR_BREAKPOINT);
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -85,12 +123,19 @@ try {
 
 const loadedNotes = loadNotesDocument(browserStorage);
 let notesDocument = loadedNotes.document;
+let canSafelySave = loadedNotes.canSave;
+let lastBackupMetadata = loadLastBackupMetadata(browserStorage);
 let editorCommands;
 let sidebarOpen = !narrowLayout.matches;
 let findReplaceMode = false;
 let pickerSelection = null;
 let ignoredFindCloseEvents = 0;
 let ignoredPickerCloseEvents = 0;
+let pendingBackup = null;
+let backupReadGeneration = 0;
+let textImportGeneration = 0;
+let restoreReturnFocus = null;
+let clearDataReturnFocus = null;
 
 function activeNote() {
   return notesDocument.notes.find(
@@ -114,6 +159,18 @@ function updateCounts() {
 
 function setCommandFeedback(message) {
   commandFeedback.textContent = message;
+}
+
+function renderBackupStatus() {
+  if (lastBackupMetadata === null) {
+    backupStatus.textContent = "No JSON backup created in this browser";
+    backupStatus.removeAttribute("title");
+    return;
+  }
+
+  const created = new Date(lastBackupMetadata.createdAt);
+  backupStatus.textContent = `Last JSON backup created ${timestampFormatter.format(created)}`;
+  backupStatus.title = lastBackupMetadata.createdAt;
 }
 
 function visibleNotes() {
@@ -212,11 +269,12 @@ function showActiveNote({ focus = "none" } = {}) {
 
 showActiveNote();
 renderNotes();
+renderBackupStatus();
 
 const autosave = createAutosave({
   delay: AUTOSAVE_DELAY_MS,
   save: () => {
-    if (!loadedNotes.canSave) {
+    if (!canSafelySave) {
       throw new Error("Stored notes cannot be safely replaced.");
     }
     saveNotesDocument(browserStorage, notesDocument);
@@ -281,6 +339,7 @@ function closeMenu({ returnFocus = false } = {}) {
 
 function openMenu() {
   closeInsertMenu();
+  closeFileMenu();
   commandMenu.hidden = false;
   moreButton.setAttribute("aria-expanded", "true");
   commandMenu.querySelector('[role="menuitem"]').focus();
@@ -301,14 +360,37 @@ function closeInsertMenu({ returnFocus = false } = {}) {
 
 function openInsertMenu() {
   closeMenu();
+  closeFileMenu();
   insertMenu.hidden = false;
   insertButton.setAttribute("aria-expanded", "true");
   insertMenu.querySelector('[role="menuitem"]').focus();
 }
 
+function closeFileMenu({ returnFocus = false } = {}) {
+  if (fileMenu.hidden) {
+    return;
+  }
+
+  fileMenu.hidden = true;
+  fileButton.setAttribute("aria-expanded", "false");
+
+  if (returnFocus) {
+    fileButton.focus();
+  }
+}
+
+function openFileMenu() {
+  closeMenu();
+  closeInsertMenu();
+  fileMenu.hidden = false;
+  fileButton.setAttribute("aria-expanded", "true");
+  fileMenu.querySelector('[role="menuitem"]').focus();
+}
+
 function closeAllMenus() {
   closeMenu();
   closeInsertMenu();
+  closeFileMenu();
 }
 
 moreButton.addEventListener("click", () => {
@@ -324,6 +406,14 @@ insertButton.addEventListener("click", () => {
     openInsertMenu();
   } else {
     closeInsertMenu({ returnFocus: true });
+  }
+});
+
+fileButton.addEventListener("click", () => {
+  if (fileMenu.hidden) {
+    openFileMenu();
+  } else {
+    closeFileMenu({ returnFocus: true });
   }
 });
 
@@ -365,6 +455,7 @@ function addMenuKeyboardHandling(menu, close) {
 
 addMenuKeyboardHandling(commandMenu, closeMenu);
 addMenuKeyboardHandling(insertMenu, closeInsertMenu);
+addMenuKeyboardHandling(fileMenu, closeFileMenu);
 
 document.addEventListener("pointerdown", (event) => {
   if (!commandMenu.hidden && !overflow.contains(event.target)) {
@@ -373,12 +464,363 @@ document.addEventListener("pointerdown", (event) => {
   if (!insertMenu.hidden && !insertPopup.contains(event.target)) {
     closeInsertMenu();
   }
+  if (!fileMenu.hidden && !filePopup.contains(event.target)) {
+    closeFileMenu();
+  }
 });
 
 for (const button of document.querySelectorAll("[data-command]")) {
   button.addEventListener("click", async () => {
     closeAllMenus();
     await editorCommands.execute(button.dataset.command);
+  });
+}
+
+function downloadFile(content, type, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function chooseFile(input) {
+  input.value = "";
+  input.click();
+}
+
+async function importTextFile(file, generation) {
+  if (!/\.txt$/iu.test(file.name)) {
+    throw new TypeError("Choose a file whose name ends in .txt.");
+  }
+
+  const content = decodeUtf8(await file.arrayBuffer());
+  if (generation !== textImportGeneration) {
+    return;
+  }
+
+  autosave.flush();
+  notesDocument = addNote(notesDocument, {
+    title: titleFromTextFilename(file.name),
+    content,
+  });
+  searchInput.value = "";
+  const saved = persistImmediately();
+  showActiveNote({ focus: "body" });
+  renderNotes();
+  setCommandFeedback(
+    saved
+      ? `Imported “${file.name}” as a new note.`
+      : `Imported “${file.name}” for this session, but browser storage is unavailable.`,
+  );
+
+  if (narrowLayout.matches) {
+    setSidebarOpen(false);
+  }
+}
+
+textFileInput.addEventListener("change", async () => {
+  const [file] = textFileInput.files;
+  if (!file) {
+    return;
+  }
+
+  const generation = ++textImportGeneration;
+  textFileInput.value = "";
+
+  try {
+    await importTextFile(file, generation);
+  } catch (error) {
+    if (generation === textImportGeneration) {
+      setCommandFeedback(`Could not import text: ${error.message}`);
+    }
+  }
+});
+
+function downloadActiveNote() {
+  autosave.flush();
+  const savedNote = activeNote();
+  const filename = sanitizeFilename(savedNote.title);
+  downloadFile(savedNote.content, "text/plain;charset=utf-8", filename);
+  setCommandFeedback(`Created text download “${filename}”.`);
+}
+
+function exportJsonBackup() {
+  autosave.flush();
+
+  try {
+    const backup = createBackup(notesDocument);
+    const serialized = serializeBackup(backup);
+    parseBackup(serialized);
+    const filename = backupFilename(backup.createdAt);
+    downloadFile(serialized, "application/json;charset=utf-8", filename);
+
+    lastBackupMetadata = { version: 1, createdAt: backup.createdAt };
+    let metadataSaved = true;
+    try {
+      saveLastBackupMetadata(browserStorage, backup.createdAt);
+    } catch {
+      metadataSaved = false;
+    }
+
+    renderBackupStatus();
+    setCommandFeedback(
+      metadataSaved
+        ? `Created JSON backup “${filename}”. Keep the downloaded file somewhere safe.`
+        : `Created JSON backup “${filename}”, but this browser could not remember its date.`,
+    );
+  } catch (error) {
+    setCommandFeedback(`Could not create backup: ${error.message}`);
+  }
+}
+
+function setRestoreError(message) {
+  pendingBackup = null;
+  restoreSummary.textContent = "";
+  restoreError.textContent = message;
+  restoreError.hidden = false;
+  restoreOptions.hidden = true;
+  restoreConfirm.disabled = true;
+  restoreConfirm.textContent = "Restore backup";
+
+  if (!restoreDialog.open) {
+    restoreDialog.showModal();
+  }
+}
+
+function setRestoreLoading() {
+  pendingBackup = null;
+  restoreSummary.textContent = "Validating the selected backup…";
+  restoreError.textContent = "";
+  restoreError.hidden = true;
+  restoreOptions.hidden = true;
+  restoreConfirm.disabled = true;
+  restoreConfirm.textContent = "Validating backup…";
+  restoreConfirm.classList.remove("danger-confirm-button");
+  restoreConfirm.classList.add("primary-button");
+
+  if (!restoreDialog.open) {
+    restoreDialog.showModal();
+  }
+}
+
+function showRestoreBackup(backup) {
+  pendingBackup = backup;
+  restoreError.hidden = true;
+  restoreError.textContent = "";
+  restoreOptions.hidden = false;
+  restoreConfirm.disabled = false;
+  const noteCount = backup.document.notes.length;
+  restoreSummary.textContent = `${pluralizedCount(noteCount, "note", "notes")} · Created ${timestampFormatter.format(new Date(backup.createdAt))}`;
+
+  const mergeOption = restoreOptions.querySelector('[value="merge"]');
+  const replaceOption = restoreOptions.querySelector('[value="replace"]');
+  mergeOption.disabled = !canSafelySave;
+  mergeOption.closest("label").title = canSafelySave
+    ? ""
+    : "Merge is unavailable because the current stored notebook could not be loaded safely.";
+  (canSafelySave ? mergeOption : replaceOption).checked = true;
+  updateRestoreConfirmation();
+
+  if (!restoreDialog.open) {
+    restoreDialog.showModal();
+  }
+}
+
+async function readBackupFile(file) {
+  if (!/\.json$/iu.test(file.name)) {
+    throw new TypeError("Choose a file whose name ends in .json.");
+  }
+  if (file.size > MAX_BACKUP_BYTES) {
+    throw new TypeError("The selected backup is larger than 25 MiB.");
+  }
+
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(
+      await file.arrayBuffer(),
+    );
+  } catch {
+    throw new TypeError("The selected backup is not valid UTF-8.");
+  }
+
+  return parseBackup(text, { byteLength: file.size });
+}
+
+backupFileInput.addEventListener("change", async () => {
+  const [file] = backupFileInput.files;
+  if (!file) {
+    return;
+  }
+
+  const generation = ++backupReadGeneration;
+  backupFileInput.value = "";
+  setRestoreLoading();
+
+  try {
+    autosave.flush();
+    const backup = await readBackupFile(file);
+    if (generation === backupReadGeneration) {
+      showRestoreBackup(backup);
+    }
+  } catch (error) {
+    if (generation === backupReadGeneration) {
+      setRestoreError(`Could not restore this file: ${error.message}`);
+    }
+  }
+});
+
+function updateRestoreConfirmation() {
+  const mode = restoreOptions.querySelector('[name="restore-mode"]:checked')?.value;
+  restoreConfirm.textContent =
+    mode === "replace" ? "Replace all local notes" : "Merge backup";
+  restoreConfirm.classList.toggle("danger-confirm-button", mode === "replace");
+  restoreConfirm.classList.toggle("primary-button", mode !== "replace");
+}
+
+restoreOptions.addEventListener("change", updateRestoreConfirmation);
+restoreChooseFile.addEventListener("click", () => chooseFile(backupFileInput));
+
+function closeRestoreDialog() {
+  if (restoreDialog.open) {
+    restoreDialog.close();
+  }
+}
+
+restoreCancel.addEventListener("click", closeRestoreDialog);
+restoreDialogClose.addEventListener("click", closeRestoreDialog);
+restoreDialog.addEventListener("close", () => {
+  backupReadGeneration += 1;
+  pendingBackup = null;
+  restoreReturnFocus?.focus();
+  restoreReturnFocus = null;
+});
+
+restoreConfirm.addEventListener("click", () => {
+  if (pendingBackup === null) {
+    return;
+  }
+
+  const mode = restoreOptions.querySelector('[name="restore-mode"]:checked').value;
+  if (mode === "merge" && !canSafelySave) {
+    setRestoreError(
+      "Merge is unavailable because the current stored notebook could not be loaded safely. Choose Replace instead.",
+    );
+    return;
+  }
+
+  let candidate;
+  try {
+    candidate =
+      mode === "merge"
+        ? mergeBackupDocument(notesDocument, pendingBackup.document)
+        : structuredClone(pendingBackup.document);
+  } catch {
+    restoreError.textContent =
+      "PlainJot could not prepare this restore without creating duplicate note IDs. No notes were changed.";
+    restoreError.hidden = false;
+    return;
+  }
+
+  try {
+    saveNotesDocument(browserStorage, candidate);
+  } catch {
+    restoreError.textContent =
+      "PlainJot could not save the restored notebook. Check browser storage access or available space; no notes were changed.";
+    restoreError.hidden = false;
+    return;
+  }
+
+  textImportGeneration += 1;
+  notesDocument = candidate;
+  canSafelySave = true;
+  autosave.reset(SAVE_STATES.SAVED);
+  searchInput.value = "";
+  renderNotes();
+  showActiveNote({ focus: "body" });
+  const restoredCount = pendingBackup.document.notes.length;
+  closeRestoreDialog();
+  setCommandFeedback(
+    mode === "merge"
+      ? `Merged ${pluralizedCount(restoredCount, "note", "notes")} from the backup.`
+      : `Restored ${pluralizedCount(restoredCount, "note", "notes")} from the backup.`,
+  );
+});
+
+function openClearDataDialog(trigger) {
+  closeAllMenus();
+  clearDataReturnFocus = trigger;
+  clearDataSummary.textContent = `${pluralizedCount(notesDocument.notes.length, "local note", "local notes")} will be removed.`;
+  clearDataError.hidden = true;
+  clearDataError.textContent = "";
+  clearDataDialog.showModal();
+  clearDataCancel.focus();
+}
+
+function closeClearDataDialog() {
+  if (clearDataDialog.open) {
+    clearDataDialog.close();
+  }
+}
+
+clearDataCancel.addEventListener("click", closeClearDataDialog);
+clearDataDialogClose.addEventListener("click", closeClearDataDialog);
+clearDataDialog.addEventListener("close", () => {
+  clearDataReturnFocus?.focus();
+  clearDataReturnFocus = null;
+});
+
+clearDataConfirm.addEventListener("click", () => {
+  try {
+    clearPlainJotData(browserStorage);
+  } catch {
+    clearDataError.textContent =
+      "PlainJot could not clear browser storage. Your current notes remain open.";
+    clearDataError.hidden = false;
+    return;
+  }
+
+  textImportGeneration += 1;
+  autosave.reset(SAVE_STATES.CLEARED);
+  canSafelySave = true;
+  notesDocument = createNotesDocument();
+  lastBackupMetadata = null;
+  searchInput.value = "";
+  renderNotes();
+  renderBackupStatus();
+  showActiveNote({ focus: "body" });
+  closeClearDataDialog();
+  setCommandFeedback("All PlainJot data was cleared from this browser.");
+});
+
+for (const button of document.querySelectorAll("[data-file-action]")) {
+  button.addEventListener("click", () => {
+    closeAllMenus();
+
+    switch (button.dataset.fileAction) {
+      case "open-text":
+        chooseFile(textFileInput);
+        break;
+      case "download-text":
+        downloadActiveNote();
+        break;
+      case "export-backup":
+        exportJsonBackup();
+        break;
+      case "restore-backup":
+        restoreReturnFocus = button.closest("#file-menu") ? fileButton : moreButton;
+        chooseFile(backupFileInput);
+        break;
+      case "clear-data":
+        openClearDataDialog(
+          button.closest("#file-menu") ? fileButton : moreButton,
+        );
+        break;
+    }
   });
 }
 
@@ -750,6 +1192,20 @@ document.addEventListener("keydown", (event) => {
     !event.altKey &&
     !event.shiftKey
   ) {
+    if (shortcutKey === "o") {
+      event.preventDefault();
+      closeAllMenus();
+      chooseFile(textFileInput);
+      return;
+    }
+
+    if (shortcutKey === "s") {
+      event.preventDefault();
+      closeAllMenus();
+      downloadActiveNote();
+      return;
+    }
+
     if (shortcutKey === "f") {
       event.preventDefault();
       openFindDialog(false);

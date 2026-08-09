@@ -5,10 +5,15 @@ import {
   DOCUMENT_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
   NOTES_DOCUMENT_STORAGE_KEY,
+  LAST_BACKUP_STORAGE_KEY,
+  PLAINJOT_STORAGE_KEYS,
+  clearPlainJotData,
   createEmptyDocument,
   createNotesDocument,
   loadDocument,
   loadNotesDocument,
+  loadLastBackupMetadata,
+  saveLastBackupMetadata,
   saveDocument,
   saveNotesDocument,
 } from "../src/storage.js";
@@ -24,6 +29,10 @@ class MemoryStorage {
 
   setItem(key, value) {
     this.values.set(key, value);
+  }
+
+  removeItem(key) {
+    this.values.delete(key);
   }
 }
 
@@ -244,4 +253,30 @@ test("saveNotesDocument rejects invalid collection relationships and dates", () 
   assert.throws(() => saveNotesDocument(storage, invalidActiveNote));
   assert.throws(() => saveNotesDocument(storage, invalidDate));
   assert.throws(() => saveNotesDocument(storage, duplicateId));
+});
+
+test("backup creation metadata round-trips and malformed metadata is ignored", () => {
+  const storage = new MemoryStorage();
+  const metadata = saveLastBackupMetadata(storage, MIGRATION_TIME);
+
+  assert.deepEqual(metadata, { version: 1, createdAt: MIGRATION_TIME });
+  assert.deepEqual(loadLastBackupMetadata(storage), metadata);
+
+  storage.setItem(LAST_BACKUP_STORAGE_KEY, "{bad json");
+  assert.equal(loadLastBackupMetadata(storage), null);
+  assert.throws(() => saveLastBackupMetadata(storage, "yesterday"));
+});
+
+test("clearPlainJotData removes only PlainJot-owned storage keys", () => {
+  const entries = Object.fromEntries(
+    PLAINJOT_STORAGE_KEYS.map((key) => [key, "owned"]),
+  );
+  const storage = new MemoryStorage({ ...entries, unrelated: "keep me" });
+
+  clearPlainJotData(storage);
+
+  for (const key of PLAINJOT_STORAGE_KEYS) {
+    assert.equal(storage.getItem(key), null);
+  }
+  assert.equal(storage.getItem("unrelated"), "keep me");
 });

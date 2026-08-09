@@ -105,3 +105,25 @@ test("flush cancels a pending timer and saves synchronously", () => {
   scheduler.runAll();
   assert.equal(saves, 1);
 });
+
+test("reset cancels pending work, clears dirty state, and sets the requested state", () => {
+  const scheduler = createScheduler();
+  const states = [];
+  let saves = 0;
+  const autosave = createAutosave({
+    save: () => {
+      saves += 1;
+    },
+    onStateChange: (state) => states.push(state),
+    schedule: scheduler.schedule,
+    cancel: scheduler.cancel,
+  });
+
+  autosave.markDirty();
+  autosave.reset(SAVE_STATES.CLEARED);
+  scheduler.runAll();
+
+  assert.equal(saves, 0);
+  assert.equal(autosave.isDirty(), false);
+  assert.deepEqual(states, [SAVE_STATES.SAVING, SAVE_STATES.CLEARED]);
+});

@@ -13,7 +13,7 @@ The core promise is:
 
 ## Project status
 
-Phase 3 is complete. The repository contains a modular, dependency-free
+Phase 4 is complete. The repository contains a modular, runtime-dependency-free
 multiple-note application with:
 
 - a titled, spellchecked plain-text editor with a responsive notes sidebar;
@@ -24,7 +24,10 @@ multiple-note application with:
 - visible save state plus live word and character counts;
 - familiar editing commands and confirmed clearing;
 - literal find and replace with case and whole-word options;
-- date-time, special-character, and emoji insertion tools; and
+- date-time, special-character, and emoji insertion tools;
+- UTF-8 text import and portable active-note downloads;
+- validated, versioned JSON backup with merge-or-replace recovery;
+- confirmed local-data clearing and visible last-backup creation time; and
 - an accessible toolbar that adapts to narrow screens.
 
 Later phases in this README remain the implementation roadmap. Check an item
@@ -44,15 +47,38 @@ python3 -m http.server 8080
 
 Open <http://localhost:8080>.
 
-Node.js LTS is included in the development container for the dependency-free
-unit tests:
+The automated tests require Node.js 20 or newer. Install the development-only
+Playwright dependency and its Chromium browser, then run both unit and browser
+tests:
 
 ```bash
+npm install
+npx playwright install --with-deps chromium
 npm test
 ```
 
+Run only the dependency-free unit tests with `npm run test:unit`.
+
 Opening `index.html` directly is not supported because browsers may block local
 JavaScript module imports and clipboard access.
+
+## Backup and recovery
+
+PlainJot autosaves notes to browser storage, but browser storage is **not a
+backup**: clearing site data, resetting the browser profile, or removing the
+browser can erase it. Use **File → Export JSON backup** to create a versioned
+file containing every note, timestamp, active-note selection, and current list
+preference, then keep that downloaded file somewhere outside the browser.
+
+**Restore JSON backup** validates the entire file before changing anything.
+Merge adds copies of all backup notes while keeping the current active note and
+preferences; Replace explicitly replaces the current notebook and preferences.
+The status-bar date records when this browser last created a JSON backup. It
+does not verify that the downloaded file still exists. Clearing PlainJot data
+does not delete files that were already downloaded.
+
+Individual `.txt` files are a plain-text escape route. Opening one creates a new
+note, while downloading a note exports its body without formatting markup.
 
 ## Product principles
 
@@ -135,13 +161,13 @@ Acceptance criteria:
 
 ### Phase 4 — Portable backup foundation
 
-- [ ] Import a UTF-8 `.txt` file into a new note
-- [ ] Download the active note as a `.txt` file
-- [ ] Sanitize the title before using it as a filename
-- [ ] Export all notes and preferences as a versioned JSON backup
-- [ ] Restore a backup after validation and explicit confirmation
-- [ ] Clear all local data after explicit confirmation
-- [ ] Show when the most recent restorable backup was created
+- [x] Import a UTF-8 `.txt` file into a new note
+- [x] Download the active note as a `.txt` file
+- [x] Sanitize the title before using it as a filename
+- [x] Export all notes and preferences as a versioned JSON backup
+- [x] Restore a backup after validation and explicit confirmation
+- [x] Clear all local data after explicit confirmation
+- [x] Show when the most recent restorable backup was created
 
 Acceptance criteria:
 
@@ -389,8 +415,8 @@ Implementation notes:
 
 ## Source structure
 
-The current implementation uses browser-native ES modules so behavior can be
-tested without a framework or build step:
+The application uses browser-native ES modules and has no build step. Pure
+behavior uses Node's test runner; recovery workflows use Playwright:
 
 ```text
 .
@@ -398,24 +424,28 @@ tested without a framework or build step:
 ├── src/
 │   ├── app.js             # initialization and event wiring
 │   ├── autosave.js        # debounce, flush, and save-state transitions
+│   ├── backup.js          # backup format, validation, filenames, and merge
 │   ├── editor.js          # selection and text-editing commands
 │   ├── find-replace.js    # literal matching and replacement helpers
 │   ├── insert.js          # insertion palettes and date-time formatting
 │   ├── notes.js           # note operations, filtering, and sorting
 │   ├── storage.js         # versioned persistence and legacy migration
 │   └── styles.css
-└── tests/
-    ├── autosave.test.js
-    ├── editor.test.js
-    ├── find-replace.test.js
-    ├── insert.test.js
-    ├── notes.test.js
-    └── storage.test.js
+├── tests/
+│   ├── autosave.test.js
+│   ├── backup.test.js
+│   ├── editor.test.js
+│   ├── find-replace.test.js
+│   ├── insert.test.js
+│   ├── notes.test.js
+│   └── storage.test.js
+└── e2e/
+    └── backup.spec.js
 ```
 
-Future phases should add focused modules for backup validation, storage
-adapters, IndexedDB migrations, Safety File access, snapshots, encryption, and
-device transfer rather than expanding `app.js` into a persistence layer.
+Future phases should add focused modules for storage adapters, IndexedDB
+migrations, Safety File access, snapshots, encryption, and device transfer
+rather than expanding `app.js` into a persistence layer.
 
 ## Keyboard shortcuts to support
 

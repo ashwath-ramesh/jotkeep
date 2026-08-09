@@ -8,6 +8,7 @@
       content="A minimal, private notepad that saves in your browser."
     />
     <title>Browser Notepad</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -91,6 +92,42 @@
 
         <div class="toolbar" role="toolbar" aria-label="Editing commands">
           <div class="desktop-commands">
+            <div class="toolbar-popup">
+              <button
+                id="file-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="file-menu"
+              >
+                File
+              </button>
+              <div id="file-menu" class="command-menu file-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-file-action="open-text">
+                  Open text file…
+                </button>
+                <button type="button" role="menuitem" data-file-action="download-text">
+                  Download note
+                </button>
+                <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-file-action="export-backup">
+                  Export JSON backup…
+                </button>
+                <button type="button" role="menuitem" data-file-action="restore-backup">
+                  Restore JSON backup…
+                </button>
+                <span class="menu-separator" role="separator"></span>
+                <button
+                  class="danger-button"
+                  type="button"
+                  role="menuitem"
+                  data-file-action="clear-data"
+                >
+                  Clear all local data…
+                </button>
+              </div>
+            </div>
+            <span class="toolbar-separator" aria-hidden="true"></span>
             <button type="button" data-command="undo">Undo</button>
             <button type="button" data-command="redo">Redo</button>
             <span class="toolbar-separator" aria-hidden="true"></span>
@@ -144,6 +181,27 @@
                 More
               </button>
               <div id="command-menu" class="command-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-file-action="open-text">
+                  Open text file…
+                </button>
+                <button type="button" role="menuitem" data-file-action="download-text">
+                  Download note
+                </button>
+                <button type="button" role="menuitem" data-file-action="export-backup">
+                  Export JSON backup…
+                </button>
+                <button type="button" role="menuitem" data-file-action="restore-backup">
+                  Restore JSON backup…
+                </button>
+                <button
+                  class="danger-button"
+                  type="button"
+                  role="menuitem"
+                  data-file-action="clear-data"
+                >
+                  Clear all local data…
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-action="find">
                   Find…
                 </button>
@@ -204,6 +262,7 @@
         <footer class="status-bar">
           <span id="save-state" role="status" aria-live="polite">Saved</span>
           <span id="command-feedback" role="status" aria-live="polite"></span>
+          <span id="backup-status">No JSON backup created in this browser</span>
           <span class="counts" aria-label="Document counts">
             <span id="word-count">0 words</span>
             <span aria-hidden="true">·</span>
@@ -212,6 +271,14 @@
         </footer>
       </section>
     </main>
+
+    <input id="text-file-input" type="file" accept=".txt,text/plain" hidden />
+    <input
+      id="backup-file-input"
+      type="file"
+      accept=".json,application/json"
+      hidden
+    />
 
     <dialog
       id="find-dialog"
@@ -280,6 +347,80 @@
       </div>
       <p class="picker-instructions">Choose an item to insert it at the cursor.</p>
       <div id="character-grid" class="character-grid"></div>
+    </dialog>
+
+    <dialog
+      id="restore-dialog"
+      class="app-dialog"
+      aria-labelledby="restore-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="restore-dialog-title">Restore JSON backup</h2>
+        <button
+          id="restore-dialog-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Cancel restore"
+        >
+          ×
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p id="restore-summary" class="dialog-copy"></p>
+        <p id="restore-error" class="dialog-error" role="alert" hidden></p>
+        <fieldset id="restore-options" class="restore-options">
+          <legend>Choose how to restore</legend>
+          <label>
+            <input type="radio" name="restore-mode" value="merge" checked />
+            <span><strong>Merge</strong> — add every backup note and keep current preferences.</span>
+          </label>
+          <label>
+            <input type="radio" name="restore-mode" value="replace" />
+            <span><strong>Replace</strong> — remove all current notes and preferences.</span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="dialog-actions">
+        <button id="restore-choose-file" type="button">Choose another file</button>
+        <span class="dialog-action-spacer"></span>
+        <button id="restore-cancel" type="button">Cancel</button>
+        <button id="restore-confirm" class="primary-button" type="button">
+          Merge backup
+        </button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="clear-data-dialog"
+      class="app-dialog"
+      aria-labelledby="clear-data-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="clear-data-dialog-title">Clear all local data?</h2>
+        <button
+          id="clear-data-dialog-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Cancel clearing local data"
+        >
+          ×
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p id="clear-data-summary" class="dialog-copy"></p>
+        <p class="dialog-copy">
+          This removes PlainJot notes, preferences, and backup status from this
+          browser. Downloaded text and JSON files are not affected.
+        </p>
+        <p id="clear-data-error" class="dialog-error" role="alert" hidden></p>
+      </div>
+      <div class="dialog-actions">
+        <span class="dialog-action-spacer"></span>
+        <button id="clear-data-cancel" type="button">Cancel</button>
+        <button id="clear-data-confirm" class="danger-confirm-button" type="button">
+          Clear all data
+        </button>
+      </div>
     </dialog>
 
     <script type="module" src="src/app.js"></script>

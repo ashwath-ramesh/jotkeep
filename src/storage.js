@@ -7,8 +7,16 @@ import {
 export const NOTES_DOCUMENT_STORAGE_KEY = "minimal-notepad.document.v2";
 export const DOCUMENT_STORAGE_KEY = "minimal-notepad.document.v1";
 export const LEGACY_STORAGE_KEY = "minimal-notepad.note.v1";
+export const LAST_BACKUP_STORAGE_KEY = "minimal-notepad.last-backup.v1";
 export const NOTES_DOCUMENT_VERSION = 2;
 export const DOCUMENT_VERSION = 1;
+export const LAST_BACKUP_VERSION = 1;
+export const PLAINJOT_STORAGE_KEYS = Object.freeze([
+  NOTES_DOCUMENT_STORAGE_KEY,
+  DOCUMENT_STORAGE_KEY,
+  LEGACY_STORAGE_KEY,
+  LAST_BACKUP_STORAGE_KEY,
+]);
 
 const VALID_SORT_OPTIONS = new Set(Object.values(SORT_OPTIONS));
 const VALID_LIST_VIEWS = new Set(Object.values(LIST_VIEWS));
@@ -131,6 +139,53 @@ function isIsoTimestamp(value) {
     return new Date(value).toISOString() === value;
   } catch {
     return false;
+  }
+}
+
+export function loadLastBackupMetadata(storage) {
+  if (!storage) {
+    return null;
+  }
+
+  try {
+    const stored = storage.getItem(LAST_BACKUP_STORAGE_KEY);
+    if (stored === null) {
+      return null;
+    }
+
+    const parsed = JSON.parse(stored);
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      parsed.version === LAST_BACKUP_VERSION &&
+      isIsoTimestamp(parsed.createdAt)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastBackupMetadata(storage, createdAt) {
+  if (!storage) {
+    throw new Error("Browser storage is unavailable.");
+  }
+
+  if (!isIsoTimestamp(createdAt)) {
+    throw new TypeError("Cannot save invalid backup metadata.");
+  }
+
+  const metadata = { version: LAST_BACKUP_VERSION, createdAt };
+  storage.setItem(LAST_BACKUP_STORAGE_KEY, JSON.stringify(metadata));
+  return metadata;
+}
+
+export function clearPlainJotData(storage) {
+  if (!storage) {
+    throw new Error("Browser storage is unavailable.");
+  }
+
+  for (const key of PLAINJOT_STORAGE_KEYS) {
+    storage.removeItem(key);
   }
 }
 

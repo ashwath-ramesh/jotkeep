@@ -66,6 +66,11 @@ button:active {
   background: var(--pressed);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -494,6 +499,12 @@ textarea:focus-visible {
   box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 10%);
 }
 
+.file-menu {
+  right: auto;
+  left: 0;
+  width: 15rem;
+}
+
 .command-menu button {
   width: 100%;
   min-height: 2.5rem;
@@ -577,6 +588,55 @@ textarea:focus-visible {
   line-height: 1.4;
 }
 
+.dialog-copy {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.dialog-error {
+  padding: 0.75rem;
+  margin: 0.25rem 0 0;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  background: #fef2f2;
+  color: var(--danger);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.restore-options {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  border: 0;
+}
+
+.restore-options legend {
+  margin-bottom: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.restore-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--muted-ink);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.restore-options input {
+  margin-top: 0.2rem;
+}
+
+.restore-options strong {
+  color: var(--ink);
+}
+
 #replace-fields {
   display: grid;
   gap: 0.5rem;
@@ -627,6 +687,18 @@ textarea:focus-visible {
 
 .dialog-actions button:not(.primary-button) {
   border-color: #d4d4d4;
+}
+
+.danger-confirm-button {
+  border-color: var(--danger) !important;
+  background: var(--danger);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.danger-confirm-button:hover,
+.danger-confirm-button:active {
+  background: #7f1d1d;
 }
 
 .dialog-action-spacer {
