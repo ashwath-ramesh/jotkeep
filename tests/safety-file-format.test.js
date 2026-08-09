@@ -73,7 +73,7 @@ test("Safety File parsing rejects malformed, incompatible, invalid, and oversize
   assert.throws(() => parseSafetyFile("{"), SafetyFileValidationError);
   assert.throws(
     () => parseSafetyFile(JSON.stringify({ format: "other", version: 1 })),
-    /not a PlainJot/u,
+    /not a JotKeep/u,
   );
   const value = createSafetyFile(documentFixture(), {
     now: () => new Date(CREATED_AT),
@@ -108,6 +108,6 @@ test("Safety File byte helpers preserve UTF-8 and produce stable fingerprints", 
   );
   assert.equal(
     safetyFileFilename(CREATED_AT),
-    "plainjot-safety-2026-08-09T12-00-00Z.plainjot",
+    "jotkeep-safety-2026-08-09T12-00-00Z.jotkeep",
   );
 });

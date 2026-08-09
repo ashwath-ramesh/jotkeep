@@ -69,7 +69,7 @@ test("backup creation and serialization round-trip the versioned format", () => 
   assert.deepEqual(parseBackup(serialized), backup);
   assert.equal(
     backupFilename(CREATED_AT),
-    "plainjot-backup-2026-08-09T12-00-00Z.json",
+    "jotkeep-backup-2026-08-09T12-00-00Z.json",
   );
 });
 
@@ -77,7 +77,7 @@ test("backup parsing reports JSON, format, version, document, and size failures"
   assert.throws(() => parseBackup("{"), BackupValidationError);
   assert.throws(
     () => parseBackup(JSON.stringify({ format: "other", version: 1 })),
-    /not a PlainJot/u,
+    /not a JotKeep/u,
   );
 
   const backup = createBackup(documentFixture(), {

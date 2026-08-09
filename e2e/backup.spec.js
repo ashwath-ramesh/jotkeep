@@ -41,7 +41,7 @@ async function releaseFileRead(page) {
 async function readIndexedDbDocument(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("plainjot", 1);
+      const request = indexedDB.open("jotkeep", 1);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -131,7 +131,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   const backupBytes = await downloadBytes(download);
   const backup = JSON.parse(backupBytes.toString("utf8"));
 
-  expect(backup.format).toBe("plainjot-backup");
+  expect(backup.format).toBe("jotkeep-backup");
   expect(backup.version).toBe(1);
   expect(backup.document.notes).toHaveLength(2);
   expect(backup.document.preferences).toEqual({
@@ -179,7 +179,7 @@ test("invalid restore changes nothing and merge preserves local context", async 
   await page.locator("#backup-file-input").setInputFiles({
     name: "invalid.json",
     mimeType: "application/json",
-    buffer: Buffer.from('{"format":"plainjot-backup","version":99}'),
+    buffer: Buffer.from('{"format":"jotkeep-backup","version":99}'),
   });
   await expect(page.locator("#restore-error")).toContainText("not supported");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -192,7 +192,7 @@ test("invalid restore changes nothing and merge preserves local context", async 
   importedDocument.notes[0].content = "Imported body";
   importedDocument.preferences = { sortBy: "title", listView: "compact" };
   const backup = {
-    format: "plainjot-backup",
+    format: "jotkeep-backup",
     version: 1,
     createdAt: "2026-08-09T12:00:00.000Z",
     document: importedDocument,
@@ -238,7 +238,7 @@ test("selecting another backup disables restore until validation finishes", asyn
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   const document = await readIndexedDbDocument(page);
   const backup = {
-    format: "plainjot-backup",
+    format: "jotkeep-backup",
     version: 1,
     createdAt: "2026-08-09T12:00:00.000Z",
     document,

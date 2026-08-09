@@ -4,13 +4,13 @@ import {
   LAST_BACKUP_VERSION,
   LEGACY_STORAGE_KEY,
   NOTES_DOCUMENT_STORAGE_KEY,
-  PLAINJOT_STORAGE_KEYS,
+  JOTKEEP_STORAGE_KEYS,
   createNotesDocument,
   isValidDocument,
   isValidNotesDocument,
 } from "./storage.js";
 
-export const DATABASE_NAME = "plainjot";
+export const DATABASE_NAME = "jotkeep";
 export const DATABASE_VERSION = 1;
 export const NOTES_STORE = "notes";
 export const METADATA_STORE = "metadata";
@@ -306,7 +306,7 @@ function openDatabase(indexedDBObject) {
         reject(
           new StorageFailure(
             STORAGE_FAILURES.UNAVAILABLE,
-            "IndexedDB is blocked by another open PlainJot tab.",
+            "IndexedDB is blocked by another open JotKeep tab.",
           ),
         );
       }
@@ -532,7 +532,7 @@ function parseLegacyDocument(storage, options) {
         sourceKeys: [],
         error: new StorageFailure(
           STORAGE_FAILURES.MIGRATION,
-          "PlainJot could not validate the existing localStorage notebook.",
+          "JotKeep could not validate the existing localStorage notebook.",
           { cause: error },
         ),
       };
@@ -557,7 +557,7 @@ function parseLegacyDocument(storage, options) {
           sourceKeys: [],
           error: new StorageFailure(
             STORAGE_FAILURES.MIGRATION,
-            "PlainJot could not validate the existing localStorage notebook.",
+            "JotKeep could not validate the existing localStorage notebook.",
             { cause: error },
           ),
         };
@@ -610,7 +610,7 @@ function hasLegacyValues(storage) {
   }
 
   try {
-    return PLAINJOT_STORAGE_KEYS.some((key) => storage.getItem(key) !== null);
+    return JOTKEEP_STORAGE_KEYS.some((key) => storage.getItem(key) !== null);
   } catch {
     return false;
   }
@@ -661,7 +661,7 @@ export function createBrowserStorageService({
   }
 
   function finishLegacyCleanup() {
-    if (!removeLegacyKeys(localStorageObject, PLAINJOT_STORAGE_KEYS)) {
+    if (!removeLegacyKeys(localStorageObject, JOTKEEP_STORAGE_KEYS)) {
       throw new StorageFailure(
         STORAGE_FAILURES.MIGRATION,
         "IndexedDB was verified, but legacy localStorage cleanup failed.",
@@ -696,7 +696,7 @@ export function createBrowserStorageService({
         writeProtected = false;
         initializationError = null;
         if (legacyValuesPresent) {
-          pendingLegacyCleanupKeys = [...PLAINJOT_STORAGE_KEYS];
+          pendingLegacyCleanupKeys = [...JOTKEEP_STORAGE_KEYS];
           try {
             finishLegacyCleanup();
           } catch (error) {
@@ -735,7 +735,7 @@ export function createBrowserStorageService({
       }
 
       if (legacy.document !== null) {
-        pendingLegacyCleanupKeys = [...PLAINJOT_STORAGE_KEYS];
+        pendingLegacyCleanupKeys = [...JOTKEEP_STORAGE_KEYS];
         migrationSourceDocument = clone(legacy.document);
         try {
           await writeMigratedState(
@@ -764,7 +764,7 @@ export function createBrowserStorageService({
           lastBackupMetadata = clone(legacy.backup);
           initializationError = new StorageFailure(
             STORAGE_FAILURES.MIGRATION,
-            "PlainJot could not finish migrating localStorage data to IndexedDB.",
+            "JotKeep could not finish migrating localStorage data to IndexedDB.",
             { cause: classifiedFailure(error) },
           );
           await persistenceStatus();
@@ -793,12 +793,12 @@ export function createBrowserStorageService({
         const stored = await readDatabase(database);
         if (JSON.stringify(stored.backup) === JSON.stringify(legacy.backup)) {
           if (legacy.sourceKeys.length !== 0) {
-            pendingLegacyCleanupKeys = [...PLAINJOT_STORAGE_KEYS];
+            pendingLegacyCleanupKeys = [...JOTKEEP_STORAGE_KEYS];
             finishLegacyCleanup();
           }
         }
       } else if (existing.backup !== null && legacy.sourceKeys.length !== 0) {
-        pendingLegacyCleanupKeys = [...PLAINJOT_STORAGE_KEYS];
+        pendingLegacyCleanupKeys = [...JOTKEEP_STORAGE_KEYS];
         finishLegacyCleanup();
       }
       initializationError = null;
@@ -901,7 +901,7 @@ export function createBrowserStorageService({
           "The replacement notebook could not be verified.",
         );
       }
-      removeLegacyKeys(localStorageObject, PLAINJOT_STORAGE_KEYS);
+      removeLegacyKeys(localStorageObject, JOTKEEP_STORAGE_KEYS);
       pendingLegacyCleanupKeys = [];
       persistedDocument = clone(document);
       writeProtected = false;
@@ -964,10 +964,10 @@ export function createBrowserStorageService({
     if (!database) {
       requireDatabase();
     }
-    if (!removeLegacyKeys(localStorageObject, PLAINJOT_STORAGE_KEYS)) {
+    if (!removeLegacyKeys(localStorageObject, JOTKEEP_STORAGE_KEYS)) {
       throw new StorageFailure(
         STORAGE_FAILURES.UNAVAILABLE,
-        "PlainJot could not remove its legacy localStorage data.",
+        "JotKeep could not remove its legacy localStorage data.",
       );
     }
 

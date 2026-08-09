@@ -54,7 +54,7 @@ function classifyFileError(error, fallback = SAFETY_FILE_FAILURES.UNAVAILABLE) {
   if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
     return new SafetyFileFailure(
       SAFETY_FILE_FAILURES.PERMISSION,
-      "PlainJot no longer has permission to access this Safety File.",
+      "JotKeep no longer has permission to access this Safety File.",
       { cause: error },
     );
   }
@@ -143,7 +143,7 @@ export async function writeSafetyFile(
       if (current.digest !== expectedDigest) {
         throw new SafetyFileFailure(
           SAFETY_FILE_FAILURES.EXTERNAL_CHANGE,
-          "The Safety File changed outside PlainJot. Automatic updates were paused.",
+          "The Safety File changed outside JotKeep. Automatic updates were paused.",
         );
       }
       previous = current.value;
@@ -172,7 +172,7 @@ export async function writeSafetyFile(
     ) {
       throw new SafetyFileFailure(
         SAFETY_FILE_FAILURES.VERIFY,
-        "PlainJot wrote the Safety File, but could not verify the saved contents.",
+        "JotKeep wrote the Safety File, but could not verify the saved contents.",
       );
     }
     return verified;
@@ -263,7 +263,7 @@ export function createSafetyFileCoordinator({
       await storageService.disconnectSafetyFile();
     } catch (error) {
       const failure = persistenceFailure(
-        "PlainJot could not retire the previous Safety File connection. No new file was connected.",
+        "JotKeep could not retire the previous Safety File connection. No new file was connected.",
         error,
       );
       setState(SAFETY_FILE_STATES.FAILED, { error: failure });
@@ -326,7 +326,7 @@ export function createSafetyFileCoordinator({
       if (read.digest !== connection.fileDigest) {
         throw new SafetyFileFailure(
           SAFETY_FILE_FAILURES.EXTERNAL_CHANGE,
-          "The Safety File changed outside PlainJot. Automatic updates were paused.",
+          "The Safety File changed outside JotKeep. Automatic updates were paused.",
         );
       }
       const documentHash = await notebookDigest(document, cryptoObject);
@@ -512,7 +512,7 @@ export function createSafetyFileCoordinator({
         await storageService.disconnectSafetyFile();
       } catch (error) {
         const failure = persistenceFailure(
-          "PlainJot could not forget the Safety File connection. Automatic updates remain paused; try disconnecting again.",
+          "JotKeep could not forget the Safety File connection. Automatic updates remain paused; try disconnecting again.",
           error,
         );
         setState(SAFETY_FILE_STATES.FAILED, { error: failure });

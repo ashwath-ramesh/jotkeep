@@ -1,7 +1,7 @@
 import { createNoteId } from "./notes.js";
 import { isValidNotesDocument } from "./storage.js";
 
-export const BACKUP_FORMAT = "plainjot-backup";
+export const BACKUP_FORMAT = "jotkeep-backup";
 export const BACKUP_VERSION = 1;
 export const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
 export const MAX_TEXT_FILE_BYTES = 5 * 1024 * 1024;
@@ -90,7 +90,7 @@ export function backupFilename(createdAt) {
   const compactTimestamp = createdAt
     .replace(/\.\d{3}Z$/u, "Z")
     .replaceAll(":", "-");
-  return `plainjot-backup-${compactTimestamp}.json`;
+  return `jotkeep-backup-${compactTimestamp}.json`;
 }
 
 export function createBackup(document, { now = () => new Date() } = {}) {
@@ -124,18 +124,18 @@ export function serializeBackup(backup) {
 
 export function validateBackup(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new BackupValidationError("This file is not a PlainJot JSON backup.");
+    throw new BackupValidationError("This file is not a JotKeep JSON backup.");
   }
 
   if (value.format !== BACKUP_FORMAT) {
     throw new BackupValidationError(
-      "This file is not a PlainJot JSON backup. Choose a backup exported by PlainJot.",
+      "This file is not a JotKeep JSON backup. Choose a backup exported by JotKeep.",
     );
   }
 
   if (value.version !== BACKUP_VERSION) {
     throw new BackupValidationError(
-      `Backup version ${String(value.version)} is not supported. This version of PlainJot supports backup version ${BACKUP_VERSION}.`,
+      `Backup version ${String(value.version)} is not supported. This version of JotKeep supports backup version ${BACKUP_VERSION}.`,
     );
   }
 
@@ -164,7 +164,7 @@ export function parseBackup(text, { byteLength } = {}) {
     parsed = JSON.parse(text);
   } catch {
     throw new BackupValidationError(
-      "The selected file is not valid JSON. Choose an unmodified PlainJot backup.",
+      "The selected file is not valid JSON. Choose an unmodified JotKeep backup.",
     );
   }
 

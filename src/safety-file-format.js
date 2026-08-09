@@ -1,6 +1,6 @@
 import { isValidNotesDocument } from "./storage.js";
 
-export const SAFETY_FILE_FORMAT = "plainjot-safety-file";
+export const SAFETY_FILE_FORMAT = "jotkeep-safety-file";
 export const SAFETY_FILE_VERSION = 1;
 export const MAX_SAFETY_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -69,16 +69,16 @@ export function createSafetyFile(
 
 export function validateSafetyFile(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new SafetyFileValidationError("This is not a PlainJot Safety File.");
+    throw new SafetyFileValidationError("This is not a JotKeep Safety File.");
   }
   if (value.format !== SAFETY_FILE_FORMAT) {
     throw new SafetyFileValidationError(
-      "This is not a PlainJot Safety File. Choose a file ending in .plainjot.",
+      "This is not a JotKeep Safety File. Choose a file ending in .jotkeep.",
     );
   }
   if (value.version !== SAFETY_FILE_VERSION) {
     throw new SafetyFileValidationError(
-      `Safety File version ${String(value.version)} is not supported. This version of PlainJot supports version ${SAFETY_FILE_VERSION}.`,
+      `Safety File version ${String(value.version)} is not supported. This version of JotKeep supports version ${SAFETY_FILE_VERSION}.`,
     );
   }
   if (
@@ -169,5 +169,5 @@ export function safetyFileFilename(createdAt) {
   const compactTimestamp = createdAt
     .replace(/\.\d{3}Z$/u, "Z")
     .replaceAll(":", "-");
-  return `plainjot-safety-${compactTimestamp}.plainjot`;
+  return `jotkeep-safety-${compactTimestamp}.jotkeep`;
 }

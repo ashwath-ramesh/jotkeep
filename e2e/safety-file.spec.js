@@ -33,7 +33,7 @@ test("manual fallback downloads and restores a complete Safety File", async ({ p
   const download = await downloadPromise;
   const bytes = await downloadBytes(download);
   const value = JSON.parse(bytes.toString("utf8"));
-  expect(value.format).toBe("plainjot-safety-file");
+  expect(value.format).toBe("jotkeep-safety-file");
   expect(value.version).toBe(1);
   expect(value.document.notes[0].content).toBe("Unicode ☕\nSecond line");
   expect(value.document.preferences.listView).toBe("compact");
@@ -63,13 +63,13 @@ test("connected files update after local autosave and pause on external changes"
     window.__safetyPermission = "granted";
     const handle = {
       kind: "file",
-      name: "Connected.plainjot",
+      name: "Connected.jotkeep",
       queryPermission: async () => window.__safetyPermission,
       requestPermission: async () => window.__safetyPermission,
       getFile: async () => {
         const bytes = new TextEncoder().encode(window.__safetyText);
         return {
-          name: "Connected.plainjot",
+          name: "Connected.jotkeep",
           size: bytes.byteLength,
           lastModified: Date.now(),
           arrayBuffer: async () => bytes.buffer,
@@ -107,7 +107,7 @@ test("connected files update after local autosave and pause on external changes"
   });
   await page.locator("#note").fill("Local change after conflict");
   await expect(page.locator("#safety-file-status")).toContainText(
-    "Changed outside PlainJot",
+    "Changed outside JotKeep",
   );
   await (await openFileAction(page, "Resolve Safety File conflict…")).click();
   await page.getByRole("button", { name: "Overwrite with local" }).click();
@@ -123,7 +123,7 @@ test("connected files update after local autosave and pause on external changes"
   });
   await page.locator("#note").fill("Local copy loses after confirmation");
   await expect(page.locator("#safety-file-status")).toContainText(
-    "Changed outside PlainJot",
+    "Changed outside JotKeep",
   );
   await (await openFileAction(page, "Resolve Safety File conflict…")).click();
   await page.getByRole("button", { name: "Use Safety File" }).click();
@@ -141,13 +141,13 @@ test("disconnect and clearing local data never modify external Safety File bytes
     window.__safetyText = "";
     const handle = {
       kind: "file",
-      name: "Kept.plainjot",
+      name: "Kept.jotkeep",
       queryPermission: async () => "granted",
       requestPermission: async () => "granted",
       getFile: async () => {
         const bytes = new TextEncoder().encode(window.__safetyText);
         return {
-          name: "Kept.plainjot",
+          name: "Kept.jotkeep",
           size: bytes.byteLength,
           lastModified: 1,
           arrayBuffer: async () => bytes.buffer,
@@ -190,7 +190,7 @@ test("a structured-cloneable file handle reconnects from IndexedDB after reload"
 }) => {
   await page.addInitScript(async () => {
     const root = await navigator.storage.getDirectory();
-    const handle = await root.getFileHandle("Remembered.plainjot", { create: true });
+    const handle = await root.getFileHandle("Remembered.jotkeep", { create: true });
     window.showOpenFilePicker = async () => [handle];
     window.showSaveFilePicker = async () => handle;
   });
@@ -204,7 +204,7 @@ test("a structured-cloneable file handle reconnects from IndexedDB after reload"
 
   await page.reload();
   await expect(page.locator("#safety-file-status")).toContainText(
-    "Remembered.plainjot",
+    "Remembered.jotkeep",
   );
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
   await page.locator("#note").fill("Updated after reload");
@@ -212,7 +212,7 @@ test("a structured-cloneable file handle reconnects from IndexedDB after reload"
 
   expect(await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
-    const handle = await root.getFileHandle("Remembered.plainjot");
+    const handle = await root.getFileHandle("Remembered.jotkeep");
     return JSON.parse(await (await handle.getFile()).text()).document.notes[0].content;
   })).toBe("Updated after reload");
 });
@@ -222,7 +222,7 @@ test("opening with merge preserves local context and verifies the combined file"
 }) => {
   await page.addInitScript(async () => {
     const root = await navigator.storage.getDirectory();
-    const handle = await root.getFileHandle("Merge.plainjot", { create: true });
+    const handle = await root.getFileHandle("Merge.jotkeep", { create: true });
     window.showOpenFilePicker = async () => [handle];
     window.showSaveFilePicker = async () => handle;
   });
@@ -253,7 +253,7 @@ test("opening with merge preserves local context and verifies the combined file"
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
   expect(await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
-    const handle = await root.getFileHandle("Merge.plainjot");
+    const handle = await root.getFileHandle("Merge.jotkeep");
     const value = JSON.parse(await (await handle.getFile()).text());
     return value.document.notes.map((note) => note.title).sort();
   })).toEqual(["External note", "Local note"]);

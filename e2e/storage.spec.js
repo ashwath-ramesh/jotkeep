@@ -49,7 +49,7 @@ function documentFixture() {
 async function readStorage(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("plainjot", 1);
+      const request = indexedDB.open("jotkeep", 1);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -129,10 +129,10 @@ test("migrates the version-2 document into individual verified records", async (
 
 test("editing one note puts only that individual note record", async ({ page }) => {
   await page.addInitScript(() => {
-    window.__plainJotPuts = [];
+    window.__jotKeepPuts = [];
     const originalPut = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function put(value, key) {
-      window.__plainJotPuts.push({ store: this.name, id: value?.id ?? key ?? value?.key });
+      window.__jotKeepPuts.push({ store: this.name, id: value?.id ?? key ?? value?.key });
       return originalPut.call(this, value, key);
     };
   });
@@ -145,12 +145,12 @@ test("editing one note puts only that individual note record", async ({ page }) 
 
   const activeId = (await readStorage(page)).metadata.activeNoteId;
   await page.evaluate(() => {
-    window.__plainJotPuts = [];
+    window.__jotKeepPuts = [];
   });
   await page.locator("#note").fill("Only this record changes");
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
-  const puts = await page.evaluate(() => window.__plainJotPuts);
+  const puts = await page.evaluate(() => window.__jotKeepPuts);
   expect(puts).toEqual([{ store: "notes", id: activeId }]);
 });
 
@@ -158,22 +158,22 @@ test("creating a note changes notes and notebook metadata in one transaction", a
   page,
 }) => {
   await page.addInitScript(() => {
-    window.__plainJotTransactions = [];
+    window.__jotKeepTransactions = [];
     const originalTransaction = IDBDatabase.prototype.transaction;
     IDBDatabase.prototype.transaction = function transaction(stores, mode, options) {
-      window.__plainJotTransactions.push({ stores: [...stores], mode });
+      window.__jotKeepTransactions.push({ stores: [...stores], mode });
       return originalTransaction.call(this, stores, mode, options);
     };
   });
   await page.goto("/");
   await page.evaluate(() => {
-    window.__plainJotTransactions = [];
+    window.__jotKeepTransactions = [];
   });
 
   await page.getByRole("button", { name: "New note" }).click();
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
-  const writes = (await page.evaluate(() => window.__plainJotTransactions)).filter(
+  const writes = (await page.evaluate(() => window.__jotKeepTransactions)).filter(
     (transaction) => transaction.mode === "readwrite",
   );
   expect(writes).toEqual([{ stores: ["notes", "metadata"], mode: "readwrite" }]);
@@ -279,7 +279,7 @@ test("a failed migration keeps the source and does not block editing", async ({
   await page.addInitScript(
     ({ key, value }) => {
       localStorage.setItem(key, JSON.stringify(value));
-      window.__plainJotOriginalPut = IDBObjectStore.prototype.put;
+      window.__jotKeepOriginalPut = IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put = function put() {
         throw new DOMException("Storage full", "QuotaExceededError");
       };
@@ -294,7 +294,7 @@ test("a failed migration keeps the source and does not block editing", async ({
   await expect(page.locator("#storage-status")).toContainText("original local data was kept");
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).not.toBeNull();
   await page.evaluate(() => {
-    IDBObjectStore.prototype.put = window.__plainJotOriginalPut;
+    IDBObjectStore.prototype.put = window.__jotKeepOriginalPut;
   });
   await page.locator("#note").fill("Editing remains available");
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");

@@ -33,7 +33,7 @@ function memoryHandle(initialText = "") {
   let permission = "granted";
   return {
     kind: "file",
-    name: "Notebook.plainjot",
+    name: "Notebook.jotkeep",
     async queryPermission() {
       return permission;
     },
@@ -199,7 +199,7 @@ test("a failed replacement save cannot leave the previous persisted handle activ
   };
   const oldHandle = memoryHandle();
   const newHandle = memoryHandle();
-  newHandle.name = "New.plainjot";
+  newHandle.name = "New.jotkeep";
   const coordinator = createSafetyFileCoordinator({
     storageService,
     directSupported: true,
@@ -276,7 +276,7 @@ test("a connection switch is aborted when the previous capability cannot be reti
   };
   const oldHandle = memoryHandle();
   const newHandle = memoryHandle();
-  newHandle.name = "Rejected.plainjot";
+  newHandle.name = "Rejected.jotkeep";
   const coordinator = createSafetyFileCoordinator({
     storageService,
     directSupported: true,

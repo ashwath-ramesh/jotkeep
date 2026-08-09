@@ -6,8 +6,8 @@ import {
   LEGACY_STORAGE_KEY,
   NOTES_DOCUMENT_STORAGE_KEY,
   LAST_BACKUP_STORAGE_KEY,
-  PLAINJOT_STORAGE_KEYS,
-  clearPlainJotData,
+  JOTKEEP_STORAGE_KEYS,
+  clearJotKeepData,
   createEmptyDocument,
   createNotesDocument,
   loadDocument,
@@ -267,15 +267,15 @@ test("backup creation metadata round-trips and malformed metadata is ignored", (
   assert.throws(() => saveLastBackupMetadata(storage, "yesterday"));
 });
 
-test("clearPlainJotData removes only PlainJot-owned storage keys", () => {
+test("clearJotKeepData removes only JotKeep-owned storage keys", () => {
   const entries = Object.fromEntries(
-    PLAINJOT_STORAGE_KEYS.map((key) => [key, "owned"]),
+    JOTKEEP_STORAGE_KEYS.map((key) => [key, "owned"]),
   );
   const storage = new MemoryStorage({ ...entries, unrelated: "keep me" });
 
-  clearPlainJotData(storage);
+  clearJotKeepData(storage);
 
-  for (const key of PLAINJOT_STORAGE_KEYS) {
+  for (const key of JOTKEEP_STORAGE_KEYS) {
     assert.equal(storage.getItem(key), null);
   }
   assert.equal(storage.getItem("unrelated"), "keep me");

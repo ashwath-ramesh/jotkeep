@@ -1,7 +1,7 @@
-# PlainJot
+# JotKeep
 
 A privacy-first, browser-based plain-text editor whose notes remain usable,
-portable, and recoverable without requiring a PlainJot account. The long-term
+portable, and recoverable without requiring a JotKeep account. The long-term
 product goal is a fast, install-free notepad with a user-owned **Safety File**:
 an automatically updated, optionally encrypted notebook file with version
 history that lives outside browser storage.
@@ -29,7 +29,7 @@ multiple-note application with:
 - UTF-8 text import and portable active-note downloads;
 - validated, versioned JSON backup with merge-or-replace recovery;
 - confirmed local-data clearing and visible last-backup creation time;
-- a versioned, verified `.plainjot` Safety File with automatic direct-file
+- a versioned, verified `.jotkeep` Safety File with automatic direct-file
   updates where supported and explicit download fallback everywhere; and
 - an accessible toolbar that adapts to narrow screens.
 
@@ -67,7 +67,7 @@ JavaScript module imports and clipboard access.
 
 ## Backup and recovery
 
-PlainJot autosaves notes to browser storage, but browser storage is **not a
+JotKeep autosaves notes to browser storage, but browser storage is **not a
 backup**: clearing site data, resetting the browser profile, or removing the
 browser can erase it. Use **File → Export JSON backup** to create a versioned
 file containing every note, timestamp, active-note selection, and current list
@@ -77,7 +77,7 @@ preference, then keep that downloaded file somewhere outside the browser.
 Merge adds copies of all backup notes while keeping the current active note and
 preferences; Replace explicitly replaces the current notebook and preferences.
 The status-bar date records when this browser last created a JSON backup. It
-does not verify that the downloaded file still exists. Clearing PlainJot data
+does not verify that the downloaded file still exists. Clearing JotKeep data
 does not delete files that were already downloaded.
 
 Individual `.txt` files are a plain-text escape route. Opening one creates a new
@@ -88,7 +88,7 @@ note, while downloading a note exports its body without formatting markup.
 A Safety File is a complete, user-owned notebook stored outside browser data.
 Use **File → Create Safety File** in browsers that support direct file access,
 or **Download Safety File** in any browser. A connected file is updated only
-after the local IndexedDB autosave succeeds. PlainJot closes the external write,
+after the local IndexedDB autosave succeeds. JotKeep closes the external write,
 reads the file back, validates it, and compares its SHA-256 fingerprint before
 showing **Backed up**.
 
@@ -97,23 +97,23 @@ permission, moving the file, or changing it in another program pauses automatic
 updates without affecting the local notebook. **Grant Safety File access** can
 restore stale permission. An external change must be resolved explicitly by
 using the external notebook, overwriting it with the local notebook, or
-disconnecting it. Disconnecting and clearing PlainJot site data remove the
+disconnecting it. Disconnecting and clearing JotKeep site data remove the
 remembered connection but never delete the external file.
 
 Direct access requires a secure context and browser support for the File System
-Access API. PlainJot detects those capabilities at runtime. Where they are not
+Access API. JotKeep detects those capabilities at runtime. Where they are not
 available, opening and verifying use a normal file input and saving creates an
 explicit download. A downloaded file cannot be automatically updated or proven
 to remain on disk, and the interface says so before the user relies on it.
 
-### `.plainjot` format version 1
+### `.jotkeep` format version 1
 
 Safety Files are UTF-8 JSON with a 25 MiB limit. The format envelope is
 versioned separately from the embedded application document:
 
 ```json
 {
-  "format": "plainjot-safety-file",
+  "format": "jotkeep-safety-file",
   "version": 1,
   "fileId": "stable-file-id",
   "revisionId": "new-id-for-each-write",
@@ -147,7 +147,7 @@ Phase 6; optional encryption is a separately versioned future envelope.
 
 ## Browser storage durability
 
-PlainJot stores notes as individual records in IndexedDB. Use **File → Keep data
+JotKeep stores notes as individual records in IndexedDB. Use **File → Keep data
 on this device** to ask the browser for persistent storage. A grant makes
 automatic eviction less likely; it does not create an external backup and does
 not prevent the user from deleting the data through browser site-data settings.
@@ -276,23 +276,23 @@ Acceptance criteria:
 - The UI states that IndexedDB and persistent storage can still be removed by a
   user clearing site data.
 
-### Phase 6 — The PlainJot Safety File
+### Phase 6 — The JotKeep Safety File
 
-- [x] Define and document a versioned `.plainjot` notebook format
+- [x] Define and document a versioned `.jotkeep` notebook format
 - [x] Include notes, preferences, timestamps, and format metadata
 - [x] Let the user create, open, verify, and disconnect a Safety File
 - [x] Automatically update a connected file after local autosave settles
 - [x] Show distinct local-save and Safety-File backup states
 - [x] Detect stale permissions, unavailable files, and external modifications
-- [x] Fall back to explicit `.plainjot` downloads where direct file writing is
+- [x] Fall back to explicit `.jotkeep` downloads where direct file writing is
   unsupported
 - [x] Preserve JSON and `.txt` export so the format never becomes a lock-in
 
 Acceptance criteria:
 
-- Clearing PlainJot's site data does not affect the external Safety File.
+- Clearing JotKeep's site data does not affect the external Safety File.
 - Opening a valid Safety File on a fresh browser restores the notebook.
-- PlainJot never claims a backup succeeded until the external write and
+- JotKeep never claims a backup succeeded until the external write and
   verification succeed.
 - Permission denial or revocation does not damage the local notebook.
 - Browser compatibility and fallback behavior are visible before the user
@@ -331,11 +331,11 @@ Acceptance criteria:
 Acceptance criteria:
 
 - Note titles and bodies do not appear as plaintext in an encrypted file.
-- The same file can be opened in a fresh compatible PlainJot installation with
+- The same file can be opened in a fresh compatible JotKeep installation with
   the correct secret.
 - A wrong secret, modified ciphertext, truncated file, or unsupported format
   imports nothing.
-- The UI clearly states that PlainJot cannot recover a forgotten secret.
+- The UI clearly states that JotKeep cannot recover a forgotten secret.
 - No custom cryptographic primitive is invented for the feature.
 
 ### Phase 9 — Everyday polish, preferences, and printing
@@ -389,7 +389,7 @@ Acceptance criteria:
 
 Acceptance criteria:
 
-- A notebook can move between two devices without creating a PlainJot account.
+- A notebook can move between two devices without creating a JotKeep account.
 - Transfer secrets never appear in logs, analytics, or URL query parameters.
 - An expired, canceled, replayed, incomplete, or tampered transfer imports
   nothing.
@@ -398,7 +398,7 @@ Acceptance criteria:
 ### Phase 12 — Launch readiness and optional hosted sync
 
 - [ ] Create an interactive recovery demo: write, clear site data, and restore
-- [ ] Publish the storage architecture, threat model, and `.plainjot` format
+- [ ] Publish the storage architecture, threat model, and `.jotkeep` format
 - [ ] Add opt-in, privacy-preserving operational metrics that never include note
   content, titles, filenames, file paths, or secrets
 - [ ] Commission a security review before advertising encrypted sync
@@ -419,7 +419,7 @@ Acceptance criteria:
 
 ## Sustainability boundaries
 
-PlainJot should monetize optional infrastructure and convenience, not basic data
+JotKeep should monetize optional infrastructure and convenience, not basic data
 ownership or recovery.
 
 The free, account-free core should include local editing, import/export, a
@@ -430,7 +430,7 @@ support. Any hosted plan must provide a complete export and a documented way to
 leave without losing access to notes.
 
 An account may be required for an optional paid service, but never to open a
-local `.plainjot` file. Billing identity, synchronization identity, and notebook
+local `.jotkeep` file. Billing identity, synchronization identity, and notebook
 encryption keys should remain separate concepts.
 
 ## Suggested interface
@@ -480,7 +480,7 @@ Implementation notes:
 - Store ISO 8601 UTC timestamps and format them only for display.
 - Keep transient state—open menus, search terms, selections—out of persistence.
 - Wrap storage reads, writes, parsing, and migrations in error handling.
-- Treat the application model, IndexedDB schema, `.plainjot` format, snapshot
+- Treat the application model, IndexedDB schema, `.jotkeep` format, snapshot
   format, and encrypted envelope as separately versioned boundaries.
 - Keep storage adapters independent from UI code so browser storage, a Safety
   File, and future hosted sync can share application operations without sharing
@@ -505,7 +505,7 @@ behavior uses Node's test runner; recovery workflows use Playwright:
 │   ├── insert.js          # insertion palettes and date-time formatting
 │   ├── indexeddb-storage.js # async adapter, transactions, and migration
 │   ├── notes.js           # note operations, filtering, and sorting
-│   ├── safety-file-format.js # .plainjot schema and validation
+│   ├── safety-file-format.js # .jotkeep schema and validation
 │   ├── safety-file.js     # file access, verification, sync, and conflicts
 │   ├── storage.js         # document validation and legacy format helpers
 │   └── styles.css

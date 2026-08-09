@@ -244,7 +244,7 @@ function renderSafetyFileStatus() {
       message = `Safety File${name}: File unavailable`;
       break;
     case SAFETY_FILE_STATES.EXTERNAL_CHANGE:
-      message = `Safety File${name}: Changed outside PlainJot`;
+      message = `Safety File${name}: Changed outside JotKeep`;
       break;
     case SAFETY_FILE_STATES.FAILED:
       message = `Safety File${name}: Backup failed; local copy is safe`;
@@ -674,15 +674,15 @@ function chooseFile(input) {
 
 const safetyPickerOptions = {
   types: [{
-    description: "PlainJot Safety Files",
-    accept: { "application/json": [".plainjot"] },
+    description: "JotKeep Safety Files",
+    accept: { "application/json": [".jotkeep"] },
   }],
   excludeAcceptAllOption: true,
 };
 
 function assertSafetyFilename(name) {
-  if (!/\.plainjot$/iu.test(name)) {
-    throw new TypeError("Choose a file whose name ends in .plainjot.");
+  if (!/\.jotkeep$/iu.test(name)) {
+    throw new TypeError("Choose a file whose name ends in .jotkeep.");
   }
 }
 
@@ -722,7 +722,7 @@ async function createDirectSafetyFile() {
   try {
     const handle = await window.showSaveFilePicker({
       ...safetyPickerOptions,
-      suggestedName: "PlainJot Safety File.plainjot",
+      suggestedName: "JotKeep Safety File.jotkeep",
     });
     assertSafetyFilename(handle.name);
     await autosave.flush();
@@ -1079,7 +1079,7 @@ async function requestBrowserPersistence() {
       break;
     default:
       setCommandFeedback(
-        "PlainJot could not request persistent storage. Editing and browser saves still work.",
+        "JotKeep could not request persistent storage. Editing and browser saves still work.",
       );
       break;
   }
@@ -1228,7 +1228,7 @@ restoreConfirm.addEventListener("click", async () => {
         : structuredClone(pendingBackup.document);
   } catch (error) {
     restoreError.textContent =
-      "PlainJot could not prepare this restore without creating duplicate note IDs. No notes were changed.";
+      "JotKeep could not prepare this restore without creating duplicate note IDs. No notes were changed.";
     restoreError.hidden = false;
     return;
   }
@@ -1242,7 +1242,7 @@ restoreConfirm.addEventListener("click", async () => {
   } catch (error) {
     reportStorageIssue(error);
     restoreError.textContent =
-      "PlainJot could not save the restored notebook. Check browser storage access or available space; no notes were changed.";
+      "JotKeep could not save the restored notebook. Check browser storage access or available space; no notes were changed.";
     restoreError.hidden = false;
     return;
   }
@@ -1299,7 +1299,7 @@ clearDataConfirm.addEventListener("click", async () => {
   } catch (error) {
     reportStorageIssue(error);
     clearDataError.textContent =
-      "PlainJot could not clear browser storage. Your current notes remain open.";
+      "JotKeep could not clear browser storage. Your current notes remain open.";
     clearDataError.hidden = false;
     safetyCoordinator.resume(notesDocument);
     return;
@@ -1318,7 +1318,7 @@ clearDataConfirm.addEventListener("click", async () => {
   renderStorageStatus();
   showActiveNote({ focus: "body" });
   closeClearDataDialog();
-  setCommandFeedback("All PlainJot data was cleared from this browser.");
+  setCommandFeedback("All JotKeep data was cleared from this browser.");
 });
 
 for (const button of document.querySelectorAll("[data-file-action]")) {

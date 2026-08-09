@@ -11,7 +11,7 @@ export const LAST_BACKUP_STORAGE_KEY = "minimal-notepad.last-backup.v1";
 export const NOTES_DOCUMENT_VERSION = 2;
 export const DOCUMENT_VERSION = 1;
 export const LAST_BACKUP_VERSION = 1;
-export const PLAINJOT_STORAGE_KEYS = Object.freeze([
+export const JOTKEEP_STORAGE_KEYS = Object.freeze([
   NOTES_DOCUMENT_STORAGE_KEY,
   DOCUMENT_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
@@ -179,12 +179,12 @@ export function saveLastBackupMetadata(storage, createdAt) {
   return metadata;
 }
 
-export function clearPlainJotData(storage) {
+export function clearJotKeepData(storage) {
   if (!storage) {
     throw new Error("Browser storage is unavailable.");
   }
 
-  for (const key of PLAINJOT_STORAGE_KEYS) {
+  for (const key of JOTKEEP_STORAGE_KEYS) {
     storage.removeItem(key);
   }
 }
