@@ -1,0 +1,267 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  background: #f7f6f2;
+  color: #24231f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #f7f6f2;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d6d2c8;
+  border-radius: 0.45rem;
+  background: #fffefa;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #aaa398;
+  background: #f6f2e9;
+}
+
+button:active {
+  background: #eee8dc;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(100%, 76rem);
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  background: #fffefa;
+  box-shadow: 0 0 2rem rgb(74 68 56 / 8%);
+}
+
+.title-bar {
+  padding: clamp(1rem, 3vw, 2rem) clamp(1rem, 4vw, 3rem) 0.75rem;
+}
+
+.title-input {
+  width: 100%;
+  padding: 0.25rem 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: clamp(1.35rem, 1.1rem + 1vw, 2rem);
+  font-weight: 650;
+}
+
+.title-input::placeholder,
+.notepad::placeholder {
+  color: #8d897f;
+}
+
+.title-input:hover {
+  border-bottom-color: #d6d2c8;
+}
+
+.toolbar {
+  position: relative;
+  z-index: 2;
+  padding: 0 1rem 0.75rem;
+  border-bottom: 1px solid #e7e3da;
+}
+
+.desktop-commands,
+.mobile-commands {
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.desktop-commands {
+  display: flex;
+}
+
+.mobile-commands {
+  display: none;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 1.75rem;
+  margin: 0 0.25rem;
+  background: #ded9cf;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.danger-button {
+  color: #9f1239;
+}
+
+.editor-panel {
+  display: flex;
+  min-height: 0;
+}
+
+.notepad {
+  display: block;
+  width: 100%;
+  min-height: 20rem;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow-y: auto;
+  background: #fffefa;
+  color: inherit;
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+  line-height: 1.75;
+  caret-color: #b45309;
+}
+
+.notepad:focus-visible {
+  outline: none;
+  box-shadow: inset 3px 0 0 #d97706;
+}
+
+.status-bar {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem clamp(1rem, 4vw, 3rem);
+  border-top: 1px solid #e7e3da;
+  background: #faf8f2;
+  color: #625f57;
+  font-size: 0.875rem;
+}
+
+#save-state {
+  font-weight: 600;
+}
+
+#command-feedback {
+  color: #9f1239;
+}
+
+.counts {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.overflow {
+  position: relative;
+  margin-left: auto;
+}
+
+.command-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  display: grid;
+  width: min(14rem, calc(100vw - 2rem));
+  padding: 0.4rem;
+  border: 1px solid #d6d2c8;
+  border-radius: 0.6rem;
+  background: #fffefa;
+  box-shadow: 0 0.75rem 2rem rgb(58 51 41 / 18%);
+}
+
+.command-menu[hidden] {
+  display: none;
+}
+
+.command-menu button {
+  width: 100%;
+  border-color: transparent;
+  text-align: left;
+}
+
+.command-menu .danger-button {
+  margin-top: 0.25rem;
+  border-top-color: #e7e3da;
+  border-radius: 0 0 0.35rem 0.35rem;
+}
+
+@media (max-width: 48rem) {
+  .title-bar {
+    padding-inline: 1rem;
+  }
+
+  .desktop-commands {
+    display: none;
+  }
+
+  .mobile-commands {
+    display: flex;
+  }
+
+  .notepad {
+    padding: 1.25rem 1rem;
+  }
+
+  .notepad:focus-visible {
+    box-shadow: inset 0 3px 0 #d97706;
+  }
+
+  .status-bar {
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    padding-inline: 1rem;
+  }
+
+  #command-feedback:not(:empty) {
+    order: 3;
+    width: 100%;
+  }
+}
+
+@media (max-width: 25rem) {
+  .counts {
+    width: 100%;
+    margin-left: 0;
+  }
+}

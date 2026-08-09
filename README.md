@@ -10,20 +10,23 @@ name, copy, branding, or proprietary assets.
 
 ## Project status
 
-The repository currently contains a small working prototype in `index.html`:
+Phase 1 is complete. The repository contains a modular, dependency-free
+single-note application with:
 
-- a responsive plain-text editor;
-- native browser spellcheck;
-- single-note persistence with `localStorage`; and
-- graceful fallback when browser storage is unavailable.
+- a titled, spellchecked plain-text editor;
+- debounced, versioned `localStorage` persistence and legacy-draft migration;
+- visible save state plus live word and character counts;
+- familiar editing commands and confirmed clearing; and
+- an accessible toolbar that adapts to narrow screens.
 
-Everything else in this README is the implementation plan. Check an item only
-after its behavior and acceptance criteria are complete.
+Later phases in this README remain the implementation roadmap. Check an item
+only after its behavior and acceptance criteria are complete.
 
 ## Run locally
 
-There are no dependencies or build steps yet. Serve the repository with any
-static file server so browser storage and file APIs run in a normal web origin.
+There are no runtime dependencies or build steps. Serve the repository with any
+static file server so JavaScript modules, browser storage, and clipboard APIs run
+in a normal web origin.
 
 ```bash
 git clone <repository-url>
@@ -33,8 +36,15 @@ python3 -m http.server 8080
 
 Open <http://localhost:8080>.
 
-Opening `index.html` directly also works for basic editing, but a local server
-is preferred for consistent browser behavior.
+Node.js LTS is included in the development container for the dependency-free
+unit tests:
+
+```bash
+npm test
+```
+
+Opening `index.html` directly is not supported because browsers may block local
+JavaScript module imports and clipboard access.
 
 ## Product principles
 
@@ -58,12 +68,12 @@ is preferred for consistent browser behavior.
 - [x] Native browser spellcheck
 - [x] Restore a saved draft after refresh
 - [x] Debounce autosave instead of writing on every keystroke
-- [ ] Show save state: `Saving…`, `Saved`, or `Storage unavailable`
-- [ ] Add a note title and persist it with the body
-- [ ] Display live word and character counts
-- [ ] Add undo, redo, cut, copy, paste, delete, and select-all commands
-- [ ] Confirm before clearing a non-empty note
-- [ ] Add responsive toolbar and keyboard-focus styles
+- [x] Show save state: `Saving…`, `Saved`, or `Storage unavailable`
+- [x] Add a note title and persist it with the body
+- [x] Display live word and character counts
+- [x] Add undo, redo, cut, copy, paste, delete, and select-all commands
+- [x] Confirm before clearing a non-empty note
+- [x] Add responsive toolbar and keyboard-focus styles
 
 Acceptance criteria:
 
@@ -218,29 +228,28 @@ Implementation notes:
 - Consider IndexedDB if note volume or size outgrows `localStorage`; keep the
   storage layer behind a small adapter so that change does not affect the UI.
 
-## Proposed source structure
+## Source structure
 
-The current single file is appropriate for the prototype. Split it when feature
-work begins to make behavior easier to test and maintain:
+Phase 1 uses browser-native ES modules so behavior can be tested without a
+framework or build step:
 
 ```text
 .
 ├── index.html
 ├── src/
 │   ├── app.js             # initialization and event wiring
+│   ├── autosave.js        # debounce, flush, and save-state transitions
 │   ├── editor.js          # selection and text-editing commands
-│   ├── notes.js           # note creation, updates, search, and sorting
-│   ├── storage.js         # persistence, migration, backup, and restore
-│   ├── shortcuts.js       # keyboard command map
+│   ├── storage.js         # versioned persistence and legacy migration
 │   └── styles.css
 └── tests/
-    ├── unit/
-    └── e2e/
+    ├── autosave.test.js
+    ├── editor.test.js
+    └── storage.test.js
 ```
 
-No framework is required for this scope. If a framework or build tool is added,
-document the Node.js version, install command, development command, test command,
-and production build command here in the same change.
+Future phases can add modules for multi-note state, shortcuts, and file handling
+as those features are implemented.
 
 ## Keyboard shortcuts to support
 

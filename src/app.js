@@ -1,0 +1,198 @@
+import { createAutosave, SAVE_STATES } from "./autosave.js";
+import { clearEditor, countText, createEditorCommands } from "./editor.js";
+import {
+  DOCUMENT_VERSION,
+  createEmptyDocument,
+  loadDocument,
+  saveDocument,
+} from "./storage.js";
+
+const AUTOSAVE_DELAY_MS = 500;
+
+const titleInput = document.querySelector("#note-title");
+const note = document.querySelector("#note");
+const saveState = document.querySelector("#save-state");
+const commandFeedback = document.querySelector("#command-feedback");
+const wordCount = document.querySelector("#word-count");
+const characterCount = document.querySelector("#character-count");
+const moreButton = document.querySelector("#more-commands");
+const commandMenu = document.querySelector("#command-menu");
+const overflow = document.querySelector(".overflow");
+const narrowLayout = window.matchMedia("(max-width: 48rem)");
+
+let browserStorage;
+
+try {
+  browserStorage = window.localStorage;
+} catch {
+  browserStorage = null;
+}
+
+const loadedDraft = browserStorage
+  ? loadDocument(browserStorage)
+  : {
+      document: createEmptyDocument(),
+      storageAvailable: false,
+      migrated: false,
+    };
+
+titleInput.value = loadedDraft.document.title;
+note.value = loadedDraft.document.body;
+
+function currentDocument() {
+  return {
+    version: DOCUMENT_VERSION,
+    title: titleInput.value,
+    body: note.value,
+  };
+}
+
+const autosave = createAutosave({
+  delay: AUTOSAVE_DELAY_MS,
+  save: () => saveDocument(browserStorage, currentDocument()),
+  onStateChange: (state) => {
+    saveState.textContent = state;
+  },
+});
+
+autosave.setState(
+  loadedDraft.storageAvailable
+    ? SAVE_STATES.SAVED
+    : SAVE_STATES.UNAVAILABLE,
+);
+
+function pluralizedCount(value, singular, plural) {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function updateCounts() {
+  const counts = countText(note.value);
+  wordCount.textContent = pluralizedCount(counts.words, "word", "words");
+  characterCount.textContent = pluralizedCount(
+    counts.characters,
+    "character",
+    "characters",
+  );
+}
+
+function setCommandFeedback(message) {
+  commandFeedback.textContent = message;
+}
+
+updateCounts();
+
+titleInput.addEventListener("input", () => {
+  setCommandFeedback("");
+  autosave.markDirty();
+});
+
+note.addEventListener("input", () => {
+  setCommandFeedback("");
+  updateCounts();
+  autosave.markDirty();
+});
+
+const editorCommands = createEditorCommands(note, {
+  onFeedback: setCommandFeedback,
+});
+
+function closeMenu({ returnFocus = false } = {}) {
+  if (commandMenu.hidden) {
+    return;
+  }
+
+  commandMenu.hidden = true;
+  moreButton.setAttribute("aria-expanded", "false");
+
+  if (returnFocus) {
+    moreButton.focus();
+  }
+}
+
+function openMenu() {
+  commandMenu.hidden = false;
+  moreButton.setAttribute("aria-expanded", "true");
+  commandMenu.querySelector('[role="menuitem"]').focus();
+}
+
+moreButton.addEventListener("click", () => {
+  if (commandMenu.hidden) {
+    openMenu();
+  } else {
+    closeMenu({ returnFocus: true });
+  }
+});
+
+commandMenu.addEventListener("keydown", (event) => {
+  const items = [...commandMenu.querySelectorAll('[role="menuitem"]')];
+  const currentIndex = items.indexOf(document.activeElement);
+  let nextIndex;
+
+  switch (event.key) {
+    case "ArrowDown":
+      nextIndex = (currentIndex + 1) % items.length;
+      break;
+    case "ArrowUp":
+      nextIndex = (currentIndex - 1 + items.length) % items.length;
+      break;
+    case "Home":
+      nextIndex = 0;
+      break;
+    case "End":
+      nextIndex = items.length - 1;
+      break;
+    case "Escape":
+      event.preventDefault();
+      closeMenu({ returnFocus: true });
+      return;
+    case "Tab":
+      closeMenu();
+      return;
+    default:
+      return;
+  }
+
+  event.preventDefault();
+  items[nextIndex].focus();
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!commandMenu.hidden && !overflow.contains(event.target)) {
+    closeMenu();
+  }
+});
+
+narrowLayout.addEventListener("change", () => closeMenu());
+
+for (const button of document.querySelectorAll("[data-command]")) {
+  button.addEventListener("click", async () => {
+    closeMenu();
+    await editorCommands.execute(button.dataset.command);
+  });
+}
+
+function clearNote() {
+  closeMenu();
+  clearEditor({
+    titleInput,
+    textarea: note,
+    confirmClear: () => window.confirm("Clear this note?"),
+    onClear: () => {
+      setCommandFeedback("");
+      updateCounts();
+      autosave.markDirty();
+      editorCommands.rememberSelection();
+    },
+  });
+}
+
+for (const button of document.querySelectorAll('[data-action="clear"]')) {
+  button.addEventListener("click", clearNote);
+}
+
+window.addEventListener("pagehide", () => autosave.flush());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    autosave.flush();
+  }
+});

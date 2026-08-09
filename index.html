@@ -7,120 +7,103 @@
       name="description"
       content="A minimal, private notepad that saves in your browser."
     />
-    <title>Notepad</title>
-    <style>
-      :root {
-        color-scheme: light;
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        background: #f7f6f2;
-        color: #24231f;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body {
-        min-height: 100%;
-        margin: 0;
-      }
-
-      body {
-        min-height: 100vh;
-        min-height: 100dvh;
-      }
-
-      .notepad {
-        display: block;
-        width: min(100%, 76rem);
-        min-height: 100vh;
-        min-height: 100dvh;
-        margin: 0 auto;
-        padding: clamp(1.5rem, 6vw, 5rem);
-        border: 0;
-        outline: 0;
-        resize: none;
-        overflow-y: auto;
-        background: #fffefa;
-        color: inherit;
-        font: inherit;
-        font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
-        line-height: 1.75;
-        caret-color: #b45309;
-      }
-
-      .notepad::placeholder {
-        color: #aaa79e;
-      }
-
-      .notepad:focus {
-        box-shadow: inset 3px 0 0 #d97706;
-      }
-
-      @media (max-width: 40rem) {
-        .notepad:focus {
-          box-shadow: none;
-        }
-      }
-    </style>
+    <title>Browser Notepad</title>
+    <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
-    <main>
-      <label for="note" hidden>Note</label>
-      <textarea
-        class="notepad"
-        id="note"
-        name="note"
-        placeholder="Start typing…"
-        autofocus
-        spellcheck="true"
-        autocapitalize="sentences"
-      ></textarea>
+    <main class="app-shell">
+      <header class="title-bar">
+        <label class="visually-hidden" for="note-title">Note title</label>
+        <input
+          class="title-input"
+          id="note-title"
+          name="note-title"
+          type="text"
+          placeholder="Untitled Note"
+          autocomplete="off"
+        />
+      </header>
+
+      <div class="toolbar" role="toolbar" aria-label="Editing commands">
+        <div class="desktop-commands">
+          <button type="button" data-command="undo">Undo</button>
+          <button type="button" data-command="redo">Redo</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button type="button" data-command="cut">Cut</button>
+          <button type="button" data-command="copy">Copy</button>
+          <button type="button" data-command="paste">Paste</button>
+          <button type="button" data-command="delete">Delete</button>
+          <button type="button" data-command="select-all">Select all</button>
+          <span class="toolbar-spacer"></span>
+          <button class="danger-button" type="button" data-action="clear">
+            Clear
+          </button>
+        </div>
+
+        <div class="mobile-commands">
+          <button type="button" data-command="undo">Undo</button>
+          <button type="button" data-command="redo">Redo</button>
+          <div class="overflow">
+            <button
+              id="more-commands"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="command-menu"
+            >
+              More
+            </button>
+            <div id="command-menu" class="command-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-command="cut">Cut</button>
+              <button type="button" role="menuitem" data-command="copy">
+                Copy
+              </button>
+              <button type="button" role="menuitem" data-command="paste">
+                Paste
+              </button>
+              <button type="button" role="menuitem" data-command="delete">
+                Delete
+              </button>
+              <button type="button" role="menuitem" data-command="select-all">
+                Select all
+              </button>
+              <button
+                class="danger-button"
+                type="button"
+                role="menuitem"
+                data-action="clear"
+              >
+                Clear note
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section class="editor-panel" aria-label="Note editor">
+        <label class="visually-hidden" for="note">Note body</label>
+        <textarea
+          class="notepad"
+          id="note"
+          name="note"
+          placeholder="Start typing…"
+          autofocus
+          spellcheck="true"
+          autocapitalize="sentences"
+        ></textarea>
+      </section>
+
+      <footer class="status-bar">
+        <span id="save-state" role="status" aria-live="polite">Saved</span>
+        <span id="command-feedback" role="status" aria-live="polite"></span>
+        <span class="counts" aria-label="Document counts">
+          <span id="word-count">0 words</span>
+          <span aria-hidden="true">·</span>
+          <span id="character-count">0 characters</span>
+        </span>
+      </footer>
     </main>
 
-    <script>
-      const STORAGE_KEY = "minimal-notepad.note.v1";
-      const AUTOSAVE_DELAY_MS = 500;
-      const note = document.querySelector("#note");
-      let autosaveTimer;
-      let hasPendingChanges = false;
-
-      try {
-        const savedNote = localStorage.getItem(STORAGE_KEY);
-
-        if (savedNote !== null) {
-          note.value = savedNote;
-        }
-      } catch {
-        // The editor still works for this tab when browser storage is unavailable.
-      }
-
-      function saveNote() {
-        if (!hasPendingChanges) {
-          return;
-        }
-
-        clearTimeout(autosaveTimer);
-        autosaveTimer = undefined;
-
-        try {
-          localStorage.setItem(STORAGE_KEY, note.value);
-          hasPendingChanges = false;
-        } catch {
-          // Keep editing available if storage is blocked or full.
-        }
-      }
-
-      note.addEventListener("input", () => {
-        hasPendingChanges = true;
-        clearTimeout(autosaveTimer);
-        autosaveTimer = setTimeout(saveNote, AUTOSAVE_DELAY_MS);
-      });
-
-      window.addEventListener("pagehide", saveNote);
-    </script>
+    <script type="module" src="src/app.js"></script>
   </body>
 </html>
