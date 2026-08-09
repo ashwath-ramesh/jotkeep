@@ -57,7 +57,7 @@ is preferred for consistent browser behavior.
 - [x] Plain-text editing surface
 - [x] Native browser spellcheck
 - [x] Restore a saved draft after refresh
-- [ ] Debounce autosave instead of writing on every keystroke
+- [x] Debounce autosave instead of writing on every keystroke
 - [ ] Show save state: `Saving…`, `Saved`, or `Storage unavailable`
 - [ ] Add a note title and persist it with the body
 - [ ] Display live word and character counts

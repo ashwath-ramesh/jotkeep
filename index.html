@@ -83,7 +83,10 @@
 
     <script>
       const STORAGE_KEY = "minimal-notepad.note.v1";
+      const AUTOSAVE_DELAY_MS = 500;
       const note = document.querySelector("#note");
+      let autosaveTimer;
+      let hasPendingChanges = false;
 
       try {
         const savedNote = localStorage.getItem(STORAGE_KEY);
@@ -95,13 +98,29 @@
         // The editor still works for this tab when browser storage is unavailable.
       }
 
-      note.addEventListener("input", () => {
+      function saveNote() {
+        if (!hasPendingChanges) {
+          return;
+        }
+
+        clearTimeout(autosaveTimer);
+        autosaveTimer = undefined;
+
         try {
           localStorage.setItem(STORAGE_KEY, note.value);
+          hasPendingChanges = false;
         } catch {
           // Keep editing available if storage is blocked or full.
         }
+      }
+
+      note.addEventListener("input", () => {
+        hasPendingChanges = true;
+        clearTimeout(autosaveTimer);
+        autosaveTimer = setTimeout(saveNote, AUTOSAVE_DELAY_MS);
       });
+
+      window.addEventListener("pagehide", saveNote);
     </script>
   </body>
 </html>
