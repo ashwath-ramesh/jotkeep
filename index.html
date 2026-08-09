@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A minimal, private notepad that saves in your browser."
+    />
+    <title>Notepad</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #f7f6f2;
+        color: #24231f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+
+      .notepad {
+        display: block;
+        width: min(100%, 76rem);
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0 auto;
+        padding: clamp(1.5rem, 6vw, 5rem);
+        border: 0;
+        outline: 0;
+        resize: none;
+        overflow-y: auto;
+        background: #fffefa;
+        color: inherit;
+        font: inherit;
+        font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+        line-height: 1.75;
+        caret-color: #b45309;
+      }
+
+      .notepad::placeholder {
+        color: #aaa79e;
+      }
+
+      .notepad:focus {
+        box-shadow: inset 3px 0 0 #d97706;
+      }
+
+      @media (max-width: 40rem) {
+        .notepad:focus {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <label for="note" hidden>Note</label>
+      <textarea
+        class="notepad"
+        id="note"
+        name="note"
+        placeholder="Start typing…"
+        autofocus
+        spellcheck="true"
+        autocapitalize="sentences"
+      ></textarea>
+    </main>
+
+    <script>
+      const STORAGE_KEY = "minimal-notepad.note.v1";
+      const note = document.querySelector("#note");
+
+      try {
+        const savedNote = localStorage.getItem(STORAGE_KEY);
+
+        if (savedNote !== null) {
+          note.value = savedNote;
+        }
+      } catch {
+        // The editor still works for this tab when browser storage is unavailable.
+      }
+
+      note.addEventListener("input", () => {
+        try {
+          localStorage.setItem(STORAGE_KEY, note.value);
+        } catch {
+          // Keep editing available if storage is blocked or full.
+        }
+      });
+    </script>
+  </body>
+</html>
