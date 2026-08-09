@@ -11,6 +11,7 @@ export const SAVE_STATES = Object.freeze({
 export function createAutosave({
   save,
   onStateChange,
+  onSaved = () => {},
   onError = () => {},
   errorState = () => SAVE_STATES.UNAVAILABLE,
   delay = 500,
@@ -66,6 +67,7 @@ export function createAutosave({
       }
 
       setState(SAVE_STATES.SAVED);
+      onSaved();
       return true;
     })();
 

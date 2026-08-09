@@ -174,7 +174,7 @@ test("invalid restore changes nothing and merge preserves local context", async 
 }) => {
   await page.locator("#note-title").fill("Local");
   await page.locator("#note").fill("Keep me");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   await page.locator("#backup-file-input").setInputFiles({
     name: "invalid.json",
@@ -235,7 +235,7 @@ test("selecting another backup disables restore until validation finishes", asyn
   page,
 }) => {
   await page.locator("#note-title").fill("Local");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   const document = await readIndexedDbDocument(page);
   const backup = {
     format: "plainjot-backup",

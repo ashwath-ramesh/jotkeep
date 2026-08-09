@@ -17,7 +17,9 @@ export const METADATA_STORE = "metadata";
 
 const NOTEBOOK_METADATA_KEY = "notebook";
 const BACKUP_METADATA_KEY = "lastBackup";
+const SAFETY_FILE_METADATA_KEY = "safetyFile";
 const STORAGE_SCHEMA_VERSION = 1;
+const SAFETY_FILE_CONNECTION_VERSION = 1;
 
 export const STORAGE_FAILURES = Object.freeze({
   QUOTA: "quota",
@@ -102,6 +104,32 @@ function backupMetadataRecord(metadata) {
   return metadata === null
     ? null
     : { key: BACKUP_METADATA_KEY, ...clone(metadata) };
+}
+
+function validSafetyFileConnection(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    value.version === SAFETY_FILE_CONNECTION_VERSION &&
+    value.handle?.kind === "file" &&
+    typeof value.fileName === "string" &&
+    value.fileName !== "" &&
+    typeof value.fileId === "string" &&
+    value.fileId !== "" &&
+    typeof value.revisionId === "string" &&
+    value.revisionId !== "" &&
+    typeof value.fileDigest === "string" &&
+    value.fileDigest !== "" &&
+    typeof value.notebookDigest === "string" &&
+    value.notebookDigest !== "" &&
+    isIsoTimestamp(value.fileCreatedAt) &&
+    isIsoTimestamp(value.fileUpdatedAt) &&
+    isIsoTimestamp(value.verifiedAt)
+  );
+}
+
+function safetyFileConnectionRecord(connection) {
+  return { key: SAFETY_FILE_METADATA_KEY, ...clone(connection) };
 }
 
 function documentFromRecords(notes, metadata) {
@@ -299,10 +327,14 @@ async function readDatabase(database) {
       const backupRequest = transaction
         .objectStore(METADATA_STORE)
         .get(BACKUP_METADATA_KEY);
-      const [notes, notebook, backupRecord] = await Promise.all([
+      const safetyFileRequest = transaction
+        .objectStore(METADATA_STORE)
+        .get(SAFETY_FILE_METADATA_KEY);
+      const [notes, notebook, backupRecord, safetyFileRecord] = await Promise.all([
         requestResult(notesRequest),
         requestResult(notebookRequest),
         requestResult(backupRequest),
+        requestResult(safetyFileRequest),
       ]);
       const document = documentFromRecords(notes, notebook);
       let backup = backupRecord
@@ -320,7 +352,28 @@ async function readDatabase(database) {
         );
       }
 
-      return { document, backup };
+      const safetyFileConnection = safetyFileRecord
+        ? {
+            version: safetyFileRecord.version,
+            handle: safetyFileRecord.handle,
+            fileName: safetyFileRecord.fileName,
+            fileId: safetyFileRecord.fileId,
+            revisionId: safetyFileRecord.revisionId,
+            fileDigest: safetyFileRecord.fileDigest,
+            notebookDigest: safetyFileRecord.notebookDigest,
+            fileCreatedAt: safetyFileRecord.fileCreatedAt,
+            fileUpdatedAt: safetyFileRecord.fileUpdatedAt,
+            verifiedAt: safetyFileRecord.verifiedAt,
+          }
+        : null;
+
+      return {
+        document,
+        backup,
+        safetyFileConnection: validSafetyFileConnection(safetyFileConnection)
+          ? safetyFileConnection
+          : null,
+      };
     },
   );
 }
@@ -657,6 +710,7 @@ export function createBrowserStorageService({
         return {
           document: clone(existing.document),
           lastBackupMetadata: clone(existing.backup),
+          safetyFileConnection: clone(existing.safetyFileConnection),
           storageAvailable: initializationError === null,
           canSafelySave: true,
           migrated: false,
@@ -671,6 +725,7 @@ export function createBrowserStorageService({
         return {
           document: fallbackDocument,
           lastBackupMetadata: null,
+          safetyFileConnection: null,
           storageAvailable: true,
           canSafelySave: false,
           migrated: false,
@@ -698,6 +753,7 @@ export function createBrowserStorageService({
           return {
             document: clone(legacy.document),
             lastBackupMetadata: clone(legacy.backup),
+            safetyFileConnection: null,
             storageAvailable: true,
             canSafelySave: true,
             migrated: true,
@@ -715,6 +771,7 @@ export function createBrowserStorageService({
           return {
             document: clone(legacy.document),
             lastBackupMetadata: clone(legacy.backup),
+            safetyFileConnection: null,
             storageAvailable: false,
             canSafelySave: true,
             migrated: false,
@@ -749,6 +806,7 @@ export function createBrowserStorageService({
       return {
         document: fallbackDocument,
         lastBackupMetadata: clone(backupMetadata),
+        safetyFileConnection: clone(existing.safetyFileConnection),
         storageAvailable: true,
         canSafelySave: true,
         migrated: false,
@@ -764,6 +822,7 @@ export function createBrowserStorageService({
       return {
         document: clone(legacy.document ?? fallbackDocument),
         lastBackupMetadata: clone(legacy.backup),
+        safetyFileConnection: null,
         storageAvailable: false,
         canSafelySave:
           initializationError.kind !== STORAGE_FAILURES.MIGRATION &&
@@ -872,6 +931,35 @@ export function createBrowserStorageService({
     }
   }
 
+  async function saveSafetyFileConnection(connection) {
+    if (!validSafetyFileConnection(connection)) {
+      throw new TypeError("Cannot save invalid Safety File connection metadata.");
+    }
+    requireDatabase();
+
+    try {
+      await runTransaction(database, METADATA_STORE, "readwrite", (transaction) => {
+        transaction
+          .objectStore(METADATA_STORE)
+          .put(safetyFileConnectionRecord(connection));
+      });
+      return clone(connection);
+    } catch (error) {
+      throw classifiedFailure(error);
+    }
+  }
+
+  async function disconnectSafetyFile() {
+    requireDatabase();
+    try {
+      await runTransaction(database, METADATA_STORE, "readwrite", (transaction) => {
+        transaction.objectStore(METADATA_STORE).delete(SAFETY_FILE_METADATA_KEY);
+      });
+    } catch (error) {
+      throw classifiedFailure(error);
+    }
+  }
+
   async function clear() {
     if (!database) {
       requireDatabase();
@@ -929,6 +1017,8 @@ export function createBrowserStorageService({
     saveNotebook,
     replaceNotebook,
     saveLastBackup,
+    saveSafetyFileConnection,
+    disconnectSafetyFile,
     clear,
     persistenceStatus,
     requestPersistence,

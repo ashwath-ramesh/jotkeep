@@ -43,6 +43,18 @@ import {
   STORAGE_FAILURES,
   createBrowserStorageService,
 } from "./indexeddb-storage.js";
+import {
+  createSafetyFile,
+  safetyFileFilename,
+  serializeSafetyFile,
+} from "./safety-file-format.js";
+import {
+  SAFETY_FILE_STATES,
+  createSafetyFileCoordinator,
+  readSafetyFile,
+  readSafetyFileHandle,
+  supportsDirectSafetyFiles,
+} from "./safety-file.js";
 
 const AUTOSAVE_DELAY_MS = 500;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
@@ -51,6 +63,7 @@ const TOOLBAR_BREAKPOINT = "(max-width: 68rem)";
 const titleInput = document.querySelector("#note-title");
 const note = document.querySelector("#note");
 const saveState = document.querySelector("#save-state");
+const safetyFileStatus = document.querySelector("#safety-file-status");
 const commandFeedback = document.querySelector("#command-feedback");
 const wordCount = document.querySelector("#word-count");
 const characterCount = document.querySelector("#character-count");
@@ -93,6 +106,7 @@ const pickerDialogTitle = document.querySelector("#picker-dialog-title");
 const characterGrid = document.querySelector("#character-grid");
 const textFileInput = document.querySelector("#text-file-input");
 const backupFileInput = document.querySelector("#backup-file-input");
+const safetyFileInput = document.querySelector("#safety-file-input");
 const restoreDialog = document.querySelector("#restore-dialog");
 const restoreSummary = document.querySelector("#restore-summary");
 const restoreError = document.querySelector("#restore-error");
@@ -107,6 +121,20 @@ const clearDataError = document.querySelector("#clear-data-error");
 const clearDataCancel = document.querySelector("#clear-data-cancel");
 const clearDataDialogClose = document.querySelector("#clear-data-dialog-close");
 const clearDataConfirm = document.querySelector("#clear-data-confirm");
+const safetyOpenDialog = document.querySelector("#safety-open-dialog");
+const safetyOpenSummary = document.querySelector("#safety-open-summary");
+const safetyOpenError = document.querySelector("#safety-open-error");
+const safetyOpenOptions = document.querySelector("#safety-open-options");
+const safetyOpenConfirm = document.querySelector("#safety-open-confirm");
+const safetyOpenCancel = document.querySelector("#safety-open-cancel");
+const safetyOpenClose = document.querySelector("#safety-open-close");
+const safetyConflictDialog = document.querySelector("#safety-conflict-dialog");
+const safetyConflictError = document.querySelector("#safety-conflict-error");
+const safetyConflictClose = document.querySelector("#safety-conflict-close");
+const safetyConflictCancel = document.querySelector("#safety-conflict-cancel");
+const safetyConflictDisconnect = document.querySelector("#safety-conflict-disconnect");
+const safetyUseFile = document.querySelector("#safety-use-file");
+const safetyOverwriteFile = document.querySelector("#safety-overwrite-file");
 const narrowLayout = window.matchMedia(MOBILE_BREAKPOINT);
 const compactToolbar = window.matchMedia(TOOLBAR_BREAKPOINT);
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -135,6 +163,20 @@ let textImportGeneration = 0;
 let restoreReturnFocus = null;
 let clearDataReturnFocus = null;
 let notebookTransitionPending = false;
+let safetyState = null;
+let pendingSafetyFile = null;
+let safetyFileInputMode = "open";
+
+const directSafetyFilesSupported = supportsDirectSafetyFiles(window);
+const safetyCoordinator = createSafetyFileCoordinator({
+  storageService,
+  initialConnection: loadedNotes.safetyFileConnection,
+  directSupported: directSafetyFilesSupported,
+  onStateChange: (state) => {
+    safetyState = state;
+    renderSafetyFileStatus();
+  },
+});
 
 function setNotebookTransitionPending(pending) {
   notebookTransitionPending = pending;
@@ -168,6 +210,64 @@ function updateCounts() {
 
 function setCommandFeedback(message) {
   commandFeedback.textContent = message;
+}
+
+function renderSafetyFileStatus() {
+  if (!safetyState) {
+    return;
+  }
+  const name = safetyState.fileName ? ` “${safetyState.fileName}”` : "";
+  let message;
+  switch (safetyState.kind) {
+    case SAFETY_FILE_STATES.MANUAL_ONLY:
+      message = "Safety File: Automatic updates unavailable—download manually";
+      break;
+    case SAFETY_FILE_STATES.PENDING:
+      message = `Safety File${name}: Waiting for local save`;
+      break;
+    case SAFETY_FILE_STATES.WRITING:
+      message = `Safety File${name}: Backing up…`;
+      break;
+    case SAFETY_FILE_STATES.BACKED_UP:
+      message = `Safety File${name}: Backed up`;
+      if (safetyState.verifiedAt) {
+        message += ` ${timestampFormatter.format(new Date(safetyState.verifiedAt))}`;
+      }
+      if (safetyState.connectionRemembered === false) {
+        message += "; connection not remembered";
+      }
+      break;
+    case SAFETY_FILE_STATES.NEEDS_PERMISSION:
+      message = `Safety File${name}: Permission needed`;
+      break;
+    case SAFETY_FILE_STATES.UNAVAILABLE:
+      message = `Safety File${name}: File unavailable`;
+      break;
+    case SAFETY_FILE_STATES.EXTERNAL_CHANGE:
+      message = `Safety File${name}: Changed outside PlainJot`;
+      break;
+    case SAFETY_FILE_STATES.FAILED:
+      message = `Safety File${name}: Backup failed; local copy is safe`;
+      break;
+    default:
+      message = "Safety File: Not connected";
+      break;
+  }
+  safetyFileStatus.textContent = message;
+  safetyFileStatus.title = safetyState.error?.message ?? message;
+
+  for (const button of document.querySelectorAll('[data-file-action="create-safety"]')) {
+    button.hidden = !directSafetyFilesSupported;
+  }
+  for (const button of document.querySelectorAll('[data-file-action="grant-safety"]')) {
+    button.hidden = safetyState.kind !== SAFETY_FILE_STATES.NEEDS_PERMISSION;
+  }
+  for (const button of document.querySelectorAll('[data-file-action="resolve-safety"]')) {
+    button.hidden = safetyState.kind !== SAFETY_FILE_STATES.EXTERNAL_CHANGE;
+  }
+  for (const button of document.querySelectorAll('[data-file-action="disconnect-safety"]')) {
+    button.hidden = safetyCoordinator.getConnection() === null;
+  }
 }
 
 function renderBackupStatus() {
@@ -332,11 +432,14 @@ const autosave = createAutosave({
     await storageService.saveNotebook(structuredClone(notesDocument));
   },
   onStateChange: (state) => {
-    saveState.textContent = state;
+    saveState.textContent = `Local: ${state}`;
     if (state === SAVE_STATES.SAVED) {
       storageIssue = null;
       renderStorageStatus();
     }
+  },
+  onSaved: () => {
+    safetyCoordinator.localSaveSettled(notesDocument);
   },
   onError: reportStorageIssue,
   errorState: (error) => {
@@ -358,8 +461,10 @@ autosave.setState(storageIssue?.kind === STORAGE_FAILURES.MIGRATION
   : loadedNotes.storageAvailable
     ? SAVE_STATES.SAVED
     : SAVE_STATES.UNAVAILABLE);
+void safetyCoordinator.initialize(notesDocument);
 
 async function persistImmediately() {
+  safetyCoordinator.markDirty();
   autosave.markDirty();
   return await autosave.flush();
 }
@@ -378,6 +483,7 @@ function updateActiveNote(changes) {
   notesDocument = nextDocument;
   setCommandFeedback("");
   renderNotes();
+  safetyCoordinator.markDirty();
   autosave.markDirty();
   return true;
 }
@@ -490,7 +596,9 @@ fileButton.addEventListener("click", () => {
 
 function addMenuKeyboardHandling(menu, close) {
   menu.addEventListener("keydown", (event) => {
-    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    const items = [...menu.querySelectorAll('[role="menuitem"]')].filter(
+      (item) => !item.hidden && !item.disabled,
+    );
     const currentIndex = items.indexOf(document.activeElement);
     let nextIndex;
 
@@ -563,6 +671,305 @@ function chooseFile(input) {
   input.value = "";
   input.click();
 }
+
+const safetyPickerOptions = {
+  types: [{
+    description: "PlainJot Safety Files",
+    accept: { "application/json": [".plainjot"] },
+  }],
+  excludeAcceptAllOption: true,
+};
+
+function assertSafetyFilename(name) {
+  if (!/\.plainjot$/iu.test(name)) {
+    throw new TypeError("Choose a file whose name ends in .plainjot.");
+  }
+}
+
+function showSafetyOpenDialog(read, handle = null) {
+  pendingSafetyFile = { read, handle };
+  const noteCount = read.value.document.notes.length;
+  safetyOpenSummary.textContent = `${read.fileName ?? handle?.name ?? "Safety File"} · ${pluralizedCount(noteCount, "note", "notes")} · Updated ${timestampFormatter.format(new Date(read.value.updatedAt))}`;
+  safetyOpenError.hidden = true;
+  safetyOpenError.textContent = "";
+  safetyOpenOptions.hidden = false;
+  safetyOpenConfirm.disabled = false;
+  safetyOpenOptions.querySelector('[value="replace"]').checked = true;
+  safetyOpenConfirm.textContent = "Replace local notebook";
+  safetyOpenConfirm.classList.add("danger-confirm-button");
+  safetyOpenConfirm.classList.remove("primary-button");
+  safetyOpenDialog.showModal();
+}
+
+async function chooseDirectSafetyFile() {
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      ...safetyPickerOptions,
+      multiple: false,
+    });
+    assertSafetyFilename(handle.name);
+    await autosave.flush();
+    const read = await readSafetyFileHandle(handle);
+    showSafetyOpenDialog(read, handle);
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      setCommandFeedback(`Could not open Safety File: ${error.message}`);
+    }
+  }
+}
+
+async function createDirectSafetyFile() {
+  try {
+    const handle = await window.showSaveFilePicker({
+      ...safetyPickerOptions,
+      suggestedName: "PlainJot Safety File.plainjot",
+    });
+    assertSafetyFilename(handle.name);
+    await autosave.flush();
+    await safetyCoordinator.waitForIdle();
+    await safetyCoordinator.create(handle, structuredClone(notesDocument));
+    setCommandFeedback(
+      `Created and verified Safety File “${handle.name}”. Automatic updates are connected.`,
+    );
+  } catch (error) {
+    if (error?.name !== "AbortError") {
+      setCommandFeedback(`Could not create Safety File: ${error.message}`);
+    }
+  }
+}
+
+async function downloadSafetyFile() {
+  await autosave.flush();
+  try {
+    const value = createSafetyFile(notesDocument);
+    const serialized = serializeSafetyFile(value);
+    const filename = safetyFileFilename(value.createdAt);
+    downloadFile(serialized, "application/json;charset=utf-8", filename);
+    setCommandFeedback(
+      `Prepared Safety File download “${filename}”. This browser cannot verify that the downloaded file remains on disk.`,
+    );
+  } catch (error) {
+    setCommandFeedback(`Could not prepare Safety File: ${error.message}`);
+  }
+}
+
+async function verifySafetyFile() {
+  const connection = safetyCoordinator.getConnection();
+  if (connection) {
+    const read = await safetyCoordinator.verify(notesDocument);
+    if (read) {
+      const matches = safetyState.kind === SAFETY_FILE_STATES.BACKED_UP;
+      setCommandFeedback(
+        matches
+          ? `Verified Safety File “${connection.fileName}”; it matches the local notebook.`
+          : `Verified Safety File “${connection.fileName}”; local changes are not backed up yet.`,
+      );
+    } else {
+      setCommandFeedback(
+        safetyState.error?.message ?? "Could not verify the connected Safety File.",
+      );
+    }
+    return;
+  }
+
+  if (directSafetyFilesSupported) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        ...safetyPickerOptions,
+        multiple: false,
+      });
+      assertSafetyFilename(handle.name);
+      const read = await readSafetyFileHandle(handle);
+      setCommandFeedback(
+        `Verified “${handle.name}”: ${pluralizedCount(read.value.document.notes.length, "note", "notes")}, updated ${timestampFormatter.format(new Date(read.value.updatedAt))}. It was not connected.`,
+      );
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        setCommandFeedback(`Could not verify Safety File: ${error.message}`);
+      }
+    }
+  } else {
+    safetyFileInputMode = "verify";
+    chooseFile(safetyFileInput);
+  }
+}
+
+safetyFileInput.addEventListener("change", async () => {
+  const [file] = safetyFileInput.files;
+  if (!file) {
+    return;
+  }
+  safetyFileInput.value = "";
+  try {
+    assertSafetyFilename(file.name);
+    const read = { ...(await readSafetyFile(file)), fileName: file.name };
+    if (safetyFileInputMode === "verify") {
+      setCommandFeedback(
+        `Verified “${file.name}”: ${pluralizedCount(read.value.document.notes.length, "note", "notes")}, updated ${timestampFormatter.format(new Date(read.value.updatedAt))}.`,
+      );
+    } else {
+      await autosave.flush();
+      showSafetyOpenDialog(read);
+    }
+  } catch (error) {
+    setCommandFeedback(`Could not ${safetyFileInputMode === "verify" ? "verify" : "open"} Safety File: ${error.message}`);
+  } finally {
+    safetyFileInputMode = "open";
+  }
+});
+
+function closeSafetyOpenDialog() {
+  if (safetyOpenDialog.open) {
+    safetyOpenDialog.close();
+  }
+}
+
+safetyOpenCancel.addEventListener("click", closeSafetyOpenDialog);
+safetyOpenClose.addEventListener("click", closeSafetyOpenDialog);
+safetyOpenDialog.addEventListener("close", () => {
+  pendingSafetyFile = null;
+});
+safetyOpenOptions.addEventListener("change", () => {
+  const replace = safetyOpenOptions.querySelector('[name="safety-open-mode"]:checked').value === "replace";
+  safetyOpenConfirm.textContent = replace ? "Replace local notebook" : "Merge and update Safety File";
+  safetyOpenConfirm.classList.toggle("danger-confirm-button", replace);
+  safetyOpenConfirm.classList.toggle("primary-button", !replace);
+});
+
+safetyOpenConfirm.addEventListener("click", async () => {
+  if (!pendingSafetyFile) {
+    return;
+  }
+  const selected = pendingSafetyFile;
+  const mode = safetyOpenOptions.querySelector('[name="safety-open-mode"]:checked').value;
+  safetyOpenError.hidden = true;
+  safetyOpenConfirm.disabled = true;
+  try {
+    let read = selected.read;
+    if (selected.handle) {
+      if (
+        typeof selected.handle.requestPermission === "function" &&
+        (await selected.handle.requestPermission({ mode: "readwrite" })) !== "granted"
+      ) {
+        throw new Error("Write permission was not granted; no local notes were changed.");
+      }
+      read = await readSafetyFileHandle(selected.handle);
+      if (read.digest !== selected.read.digest) {
+        throw new Error("The selected Safety File changed while the dialog was open. Open it again.");
+      }
+    }
+
+    const candidate = mode === "merge"
+      ? mergeBackupDocument(notesDocument, read.value.document)
+      : structuredClone(read.value.document);
+
+    await safetyCoordinator.waitForIdle();
+    if (selected.handle) {
+      await safetyCoordinator.prepareConnectionSwitch(read.value.fileId);
+    }
+    if (mode === "merge") {
+      await storageService.saveNotebook(candidate);
+    } else {
+      await storageService.replaceNotebook(candidate);
+    }
+
+    textImportGeneration += 1;
+    notesDocument = candidate;
+    canSafelySave = true;
+    storageIssue = null;
+    autosave.reset(SAVE_STATES.SAVED);
+    saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
+    searchInput.value = "";
+    renderNotes();
+    showActiveNote({ focus: "body" });
+
+    if (selected.handle) {
+      await safetyCoordinator.connectVerified(
+        selected.handle,
+        read,
+        read.value.document,
+      );
+      if (mode === "merge") {
+        safetyCoordinator.markDirty();
+        safetyCoordinator.localSaveSettled(candidate);
+        await safetyCoordinator.waitForIdle();
+      }
+    }
+
+    closeSafetyOpenDialog();
+    if (
+      selected.handle &&
+      mode === "merge" &&
+      safetyState.kind !== SAFETY_FILE_STATES.BACKED_UP
+    ) {
+      setCommandFeedback(
+        `Merged “${read.fileName}” locally, but the Safety File was not updated: ${safetyState.error?.message ?? "check its backup status"}`,
+      );
+    } else {
+      setCommandFeedback(
+        selected.handle
+          ? `${mode === "merge" ? "Merged and connected" : "Opened and connected"} Safety File “${read.fileName}”.`
+          : `${mode === "merge" ? "Merged" : "Opened"} “${read.fileName}”. Download a new Safety File to preserve future changes.`,
+      );
+    }
+  } catch (error) {
+    safetyOpenError.textContent = `Could not open this Safety File: ${error.message}`;
+    safetyOpenError.hidden = false;
+    safetyOpenConfirm.disabled = false;
+  }
+});
+
+function closeSafetyConflictDialog() {
+  if (safetyConflictDialog.open) {
+    safetyConflictDialog.close();
+  }
+}
+
+safetyConflictClose.addEventListener("click", closeSafetyConflictDialog);
+safetyConflictCancel.addEventListener("click", closeSafetyConflictDialog);
+safetyConflictDisconnect.addEventListener("click", async () => {
+  if (await safetyCoordinator.disconnect()) {
+    closeSafetyConflictDialog();
+    setCommandFeedback("Disconnected the Safety File. The external file was not changed.");
+  } else {
+    safetyConflictError.textContent = safetyState.error.message;
+    safetyConflictError.hidden = false;
+  }
+});
+safetyUseFile.addEventListener("click", async () => {
+  safetyConflictError.hidden = true;
+  try {
+    const connection = safetyCoordinator.getConnection();
+    const read = await readSafetyFileHandle(connection.handle);
+    await storageService.replaceNotebook(read.value.document);
+    notesDocument = structuredClone(read.value.document);
+    textImportGeneration += 1;
+    canSafelySave = true;
+    storageIssue = null;
+    autosave.reset(SAVE_STATES.SAVED);
+    saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
+    searchInput.value = "";
+    renderNotes();
+    renderStorageStatus();
+    showActiveNote({ focus: "body" });
+    await safetyCoordinator.connectVerified(connection.handle, read, notesDocument);
+    closeSafetyConflictDialog();
+    setCommandFeedback(`Replaced the local notebook with Safety File “${connection.fileName}”.`);
+  } catch (error) {
+    safetyConflictError.textContent = `Could not use the Safety File: ${error.message}`;
+    safetyConflictError.hidden = false;
+  }
+});
+safetyOverwriteFile.addEventListener("click", async () => {
+  safetyConflictError.hidden = true;
+  if (await safetyCoordinator.overwrite(structuredClone(notesDocument))) {
+    closeSafetyConflictDialog();
+    setCommandFeedback("Overwrote and verified the Safety File with the local notebook.");
+  } else {
+    safetyConflictError.textContent = safetyState.error?.message ?? "Could not overwrite the Safety File.";
+    safetyConflictError.hidden = false;
+  }
+});
 
 async function importTextFile(file, generation) {
   if (!/\.txt$/iu.test(file.name)) {
@@ -845,6 +1252,9 @@ restoreConfirm.addEventListener("click", async () => {
   canSafelySave = true;
   storageIssue = null;
   autosave.reset(SAVE_STATES.SAVED);
+  saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
+  safetyCoordinator.markDirty();
+  safetyCoordinator.localSaveSettled(candidate);
   searchInput.value = "";
   renderNotes();
   showActiveNote({ focus: "body" });
@@ -881,7 +1291,9 @@ clearDataDialog.addEventListener("close", () => {
 });
 
 clearDataConfirm.addEventListener("click", async () => {
+  await safetyCoordinator.suspend();
   await autosave.flush();
+  await safetyCoordinator.waitForIdle();
   try {
     await storageService.clear();
   } catch (error) {
@@ -889,6 +1301,7 @@ clearDataConfirm.addEventListener("click", async () => {
     clearDataError.textContent =
       "PlainJot could not clear browser storage. Your current notes remain open.";
     clearDataError.hidden = false;
+    safetyCoordinator.resume(notesDocument);
     return;
   }
 
@@ -898,6 +1311,7 @@ clearDataConfirm.addEventListener("click", async () => {
   storageIssue = null;
   notesDocument = createNotesDocument();
   lastBackupMetadata = null;
+  await safetyCoordinator.disconnect({ persist: false });
   searchInput.value = "";
   renderNotes();
   renderBackupStatus();
@@ -917,6 +1331,42 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
         break;
       case "download-text":
         await downloadActiveNote();
+        break;
+      case "create-safety":
+        await createDirectSafetyFile();
+        break;
+      case "open-safety":
+        if (directSafetyFilesSupported) {
+          await chooseDirectSafetyFile();
+        } else {
+          safetyFileInputMode = "open";
+          chooseFile(safetyFileInput);
+        }
+        break;
+      case "download-safety":
+        await downloadSafetyFile();
+        break;
+      case "verify-safety":
+        await verifySafetyFile();
+        break;
+      case "grant-safety":
+        if (await safetyCoordinator.grant(notesDocument)) {
+          setCommandFeedback("Safety File access restored and the file was verified.");
+        } else {
+          setCommandFeedback("Safety File access was not granted. Local saves continue normally.");
+        }
+        break;
+      case "resolve-safety":
+        safetyConflictError.hidden = true;
+        safetyConflictError.textContent = "";
+        safetyConflictDialog.showModal();
+        break;
+      case "disconnect-safety":
+        if (await safetyCoordinator.disconnect()) {
+          setCommandFeedback("Disconnected the Safety File. The external file was not changed.");
+        } else {
+          setCommandFeedback(safetyState.error.message);
+        }
         break;
       case "export-backup":
         await exportJsonBackup();

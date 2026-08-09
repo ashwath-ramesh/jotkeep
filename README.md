@@ -13,7 +13,7 @@ The core promise is:
 
 ## Project status
 
-Phase 5 is complete. The repository contains a modular, runtime-dependency-free
+Phase 6 is complete. The repository contains a modular, runtime-dependency-free
 multiple-note application with:
 
 - a titled, spellchecked plain-text editor with a responsive notes sidebar;
@@ -28,7 +28,9 @@ multiple-note application with:
 - date-time, special-character, and emoji insertion tools;
 - UTF-8 text import and portable active-note downloads;
 - validated, versioned JSON backup with merge-or-replace recovery;
-- confirmed local-data clearing and visible last-backup creation time; and
+- confirmed local-data clearing and visible last-backup creation time;
+- a versioned, verified `.plainjot` Safety File with automatic direct-file
+  updates where supported and explicit download fallback everywhere; and
 - an accessible toolbar that adapts to narrow screens.
 
 Later phases in this README remain the implementation roadmap. Check an item
@@ -80,6 +82,68 @@ does not delete files that were already downloaded.
 
 Individual `.txt` files are a plain-text escape route. Opening one creates a new
 note, while downloading a note exports its body without formatting markup.
+
+## Safety Files
+
+A Safety File is a complete, user-owned notebook stored outside browser data.
+Use **File → Create Safety File** in browsers that support direct file access,
+or **Download Safety File** in any browser. A connected file is updated only
+after the local IndexedDB autosave succeeds. PlainJot closes the external write,
+reads the file back, validates it, and compares its SHA-256 fingerprint before
+showing **Backed up**.
+
+The local-save and Safety-File states are intentionally separate. Losing file
+permission, moving the file, or changing it in another program pauses automatic
+updates without affecting the local notebook. **Grant Safety File access** can
+restore stale permission. An external change must be resolved explicitly by
+using the external notebook, overwriting it with the local notebook, or
+disconnecting it. Disconnecting and clearing PlainJot site data remove the
+remembered connection but never delete the external file.
+
+Direct access requires a secure context and browser support for the File System
+Access API. PlainJot detects those capabilities at runtime. Where they are not
+available, opening and verifying use a normal file input and saving creates an
+explicit download. A downloaded file cannot be automatically updated or proven
+to remain on disk, and the interface says so before the user relies on it.
+
+### `.plainjot` format version 1
+
+Safety Files are UTF-8 JSON with a 25 MiB limit. The format envelope is
+versioned separately from the embedded application document:
+
+```json
+{
+  "format": "plainjot-safety-file",
+  "version": 1,
+  "fileId": "stable-file-id",
+  "revisionId": "new-id-for-each-write",
+  "createdAt": "2026-08-09T12:00:00.000Z",
+  "updatedAt": "2026-08-09T12:30:00.000Z",
+  "document": {
+    "version": 2,
+    "activeNoteId": "note_123",
+    "notes": [
+      {
+        "id": "note_123",
+        "title": "Untitled Note",
+        "content": "",
+        "createdAt": "2026-08-09T12:00:00.000Z",
+        "updatedAt": "2026-08-09T12:30:00.000Z"
+      }
+    ],
+    "preferences": {
+      "sortBy": "updatedAt",
+      "listView": "detailed"
+    }
+  }
+}
+```
+
+`fileId` and `createdAt` remain stable for the life of a connected file;
+`revisionId` and `updatedAt` change on every verified write. Each note retains
+its own `createdAt` and `updatedAt` timestamps. Unknown or incompatible format
+versions are rejected without importing anything. The format is unencrypted in
+Phase 6; optional encryption is a separately versioned future envelope.
 
 ## Browser storage durability
 
@@ -214,15 +278,15 @@ Acceptance criteria:
 
 ### Phase 6 — The PlainJot Safety File
 
-- [ ] Define and document a versioned `.plainjot` notebook format
-- [ ] Include notes, preferences, timestamps, and format metadata
-- [ ] Let the user create, open, verify, and disconnect a Safety File
-- [ ] Automatically update a connected file after local autosave settles
-- [ ] Show distinct local-save and Safety-File backup states
-- [ ] Detect stale permissions, unavailable files, and external modifications
-- [ ] Fall back to explicit `.plainjot` downloads where direct file writing is
+- [x] Define and document a versioned `.plainjot` notebook format
+- [x] Include notes, preferences, timestamps, and format metadata
+- [x] Let the user create, open, verify, and disconnect a Safety File
+- [x] Automatically update a connected file after local autosave settles
+- [x] Show distinct local-save and Safety-File backup states
+- [x] Detect stale permissions, unavailable files, and external modifications
+- [x] Fall back to explicit `.plainjot` downloads where direct file writing is
   unsupported
-- [ ] Preserve JSON and `.txt` export so the format never becomes a lock-in
+- [x] Preserve JSON and `.txt` export so the format never becomes a lock-in
 
 Acceptance criteria:
 
@@ -441,6 +505,8 @@ behavior uses Node's test runner; recovery workflows use Playwright:
 │   ├── insert.js          # insertion palettes and date-time formatting
 │   ├── indexeddb-storage.js # async adapter, transactions, and migration
 │   ├── notes.js           # note operations, filtering, and sorting
+│   ├── safety-file-format.js # .plainjot schema and validation
+│   ├── safety-file.js     # file access, verification, sync, and conflicts
 │   ├── storage.js         # document validation and legacy format helpers
 │   └── styles.css
 ├── tests/
@@ -450,9 +516,12 @@ behavior uses Node's test runner; recovery workflows use Playwright:
 │   ├── find-replace.test.js
 │   ├── insert.test.js
 │   ├── notes.test.js
+│   ├── safety-file-format.test.js
+│   ├── safety-file.test.js
 │   └── storage.test.js
 └── e2e/
     ├── backup.spec.js
+    ├── safety-file.spec.js
     └── storage.spec.js
 ```
 

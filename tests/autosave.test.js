@@ -55,6 +55,29 @@ test("autosave coalesces edits and saves after the debounce", async () => {
   assert.deepEqual(states, [SAVE_STATES.SAVING, SAVE_STATES.SAVED]);
 });
 
+test("autosave announces one settled snapshot after coalesced local saves", async () => {
+  const scheduler = createScheduler();
+  let settled = 0;
+  const autosave = createAutosave({
+    save: () => {},
+    onStateChange: () => {},
+    onSaved: () => {
+      settled += 1;
+    },
+    schedule: scheduler.schedule,
+    cancel: scheduler.cancel,
+  });
+
+  autosave.markDirty();
+  autosave.markDirty();
+  await scheduler.runAll();
+  assert.equal(settled, 1);
+
+  autosave.markDirty();
+  await scheduler.runAll();
+  assert.equal(settled, 2);
+});
+
 test("autosave stays dirty after failure and retries after another edit", async () => {
   const scheduler = createScheduler();
   const states = [];
@@ -159,6 +182,7 @@ test("an edit during an in-flight save is included in a serialized follow-up", a
 test("async failures retain dirty state and use the classified error state", async () => {
   const errors = [];
   const states = [];
+  let settled = 0;
   const failure = { kind: "quota" };
   const autosave = createAutosave({
     save: async () => {
@@ -166,6 +190,9 @@ test("async failures retain dirty state and use the classified error state", asy
     },
     onStateChange: (state) => states.push(state),
     onError: (error) => errors.push(error),
+    onSaved: () => {
+      settled += 1;
+    },
     errorState: () => SAVE_STATES.QUOTA,
   });
 
@@ -174,5 +201,6 @@ test("async failures retain dirty state and use the classified error state", asy
   assert.equal(await autosave.flush(), false);
   assert.equal(autosave.isDirty(), true);
   assert.deepEqual(errors, [failure]);
+  assert.equal(settled, 0);
   assert.equal(states.at(-1), SAVE_STATES.QUOTA);
 });

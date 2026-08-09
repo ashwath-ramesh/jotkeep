@@ -138,17 +138,17 @@ test("editing one note puts only that individual note record", async ({ page }) 
   });
   await page.goto("/");
   await page.locator("#note-title").fill("First");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   await page.getByRole("button", { name: "New note" }).click();
   await page.locator("#note-title").fill("Second");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   const activeId = (await readStorage(page)).metadata.activeNoteId;
   await page.evaluate(() => {
     window.__plainJotPuts = [];
   });
   await page.locator("#note").fill("Only this record changes");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   const puts = await page.evaluate(() => window.__plainJotPuts);
   expect(puts).toEqual([{ store: "notes", id: activeId }]);
@@ -171,7 +171,7 @@ test("creating a note changes notes and notebook metadata in one transaction", a
   });
 
   await page.getByRole("button", { name: "New note" }).click();
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   const writes = (await page.evaluate(() => window.__plainJotTransactions)).filter(
     (transaction) => transaction.mode === "readwrite",
@@ -185,7 +185,7 @@ test("rejects a stale cross-tab save without corrupting note metadata", async ({
 }) => {
   await page.goto("/");
   await page.locator("#note-title").fill("Original");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   const stalePage = await context.newPage();
   await stalePage.goto("/");
@@ -193,11 +193,11 @@ test("rejects a stale cross-tab save without corrupting note metadata", async ({
 
   await page.getByRole("button", { name: "New note" }).click();
   await page.locator("#note-title").fill("Added elsewhere");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   await stalePage.locator("#note-list-view").selectOption("compact");
   await expect(stalePage.locator("#save-state")).toHaveText(
-    "Changed in another tab",
+    "Local: Changed in another tab",
   );
   await expect(stalePage.locator("#storage-status")).toContainText(
     "changed in another tab",
@@ -233,13 +233,13 @@ test("reports failed legacy cleanup and retries it on the next load", async ({
   );
 
   await page.goto("/");
-  await expect(page.locator("#save-state")).toHaveText("Migration failed");
+  await expect(page.locator("#save-state")).toHaveText("Local: Migration failed");
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).not.toBeNull();
 
   await page.evaluate(() => sessionStorage.setItem("allowLegacyCleanup", "yes"));
   await page.reload();
 
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   const remaining = await page.evaluate((keys) =>
     keys.map((key) => localStorage.getItem(key)), [
       STORAGE_KEY,
@@ -290,14 +290,14 @@ test("a failed migration keeps the source and does not block editing", async ({
   await page.goto("/");
 
   await expect(page.locator("#note-title")).toHaveValue("Second");
-  await expect(page.locator("#save-state")).toHaveText("Migration failed");
+  await expect(page.locator("#save-state")).toHaveText("Local: Migration failed");
   await expect(page.locator("#storage-status")).toContainText("original local data was kept");
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).not.toBeNull();
   await page.evaluate(() => {
     IDBObjectStore.prototype.put = window.__plainJotOriginalPut;
   });
   await page.locator("#note").fill("Editing remains available");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   await expect(page.locator("#note")).toHaveValue("Editing remains available");
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
   await page.reload();
@@ -314,7 +314,7 @@ test("reports quota failures without disabling the editor", async ({ page }) => 
 
   await page.locator("#note").fill("Unsaved but still editable");
 
-  await expect(page.locator("#save-state")).toHaveText("Storage full");
+  await expect(page.locator("#save-state")).toHaveText("Local: Storage full");
   await expect(page.locator("#storage-status")).toContainText("storage is full");
   await expect(page.locator("#note")).toBeEditable();
   await expect(page.locator("#note")).toHaveValue("Unsaved but still editable");
@@ -333,7 +333,7 @@ test("reports unavailable IndexedDB without blocking editing", async ({ page }) 
   });
   await page.goto("/");
 
-  await expect(page.locator("#save-state")).toHaveText("Storage unavailable");
+  await expect(page.locator("#save-state")).toHaveText("Local: Storage unavailable");
   await expect(page.locator("#storage-status")).toContainText("storage is unavailable");
   await page.locator("#note").fill("Session-only editing");
   await expect(page.locator("#note")).toHaveValue("Session-only editing");
@@ -360,5 +360,5 @@ test("reports a denied persistent-storage request without affecting saves", asyn
 
   await expect(page.locator("#storage-status")).toContainText("not granted");
   await page.locator("#note").fill("Still saved");
-  await expect(page.locator("#save-state")).toHaveText("Saved");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 });

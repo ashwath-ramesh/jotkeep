@@ -452,6 +452,7 @@ textarea:focus-visible {
 
 .status-bar {
   display: flex;
+  flex-wrap: wrap;
   min-height: 2rem;
   align-items: center;
   gap: 1rem;
@@ -468,6 +469,11 @@ textarea:focus-visible {
   font-weight: 500;
 }
 
+#safety-file-status {
+  color: var(--ink);
+  font-weight: 500;
+}
+
 .counts {
   display: flex;
   gap: 0.5rem;
@@ -478,6 +484,10 @@ textarea:focus-visible {
 #storage-status {
   order: 4;
   width: 100%;
+}
+
+.safety-conflict-actions {
+  align-items: center;
 }
 
 .overflow,

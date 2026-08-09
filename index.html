@@ -110,6 +110,28 @@
                   Download note
                 </button>
                 <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-file-action="create-safety">
+                  Create Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="open-safety">
+                  Open Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="download-safety">
+                  Download Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="verify-safety">
+                  Verify Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="grant-safety" hidden>
+                  Grant Safety File access…
+                </button>
+                <button type="button" role="menuitem" data-file-action="resolve-safety" hidden>
+                  Resolve Safety File conflict…
+                </button>
+                <button type="button" role="menuitem" data-file-action="disconnect-safety" hidden>
+                  Disconnect Safety File
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="export-backup">
                   Export JSON backup…
                 </button>
@@ -190,6 +212,29 @@
                 <button type="button" role="menuitem" data-file-action="download-text">
                   Download note
                 </button>
+                <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-file-action="create-safety">
+                  Create Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="open-safety">
+                  Open Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="download-safety">
+                  Download Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="verify-safety">
+                  Verify Safety File…
+                </button>
+                <button type="button" role="menuitem" data-file-action="grant-safety" hidden>
+                  Grant Safety File access…
+                </button>
+                <button type="button" role="menuitem" data-file-action="resolve-safety" hidden>
+                  Resolve Safety File conflict…
+                </button>
+                <button type="button" role="menuitem" data-file-action="disconnect-safety" hidden>
+                  Disconnect Safety File
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="export-backup">
                   Export JSON backup…
                 </button>
@@ -266,7 +311,10 @@
         </section>
 
         <footer class="status-bar">
-          <span id="save-state" role="status" aria-live="polite">Saved</span>
+          <span id="save-state" role="status" aria-live="polite">Local: Saved</span>
+          <span id="safety-file-status" role="status" aria-live="polite">
+            Safety File: Checking…
+          </span>
           <span id="command-feedback" role="status" aria-live="polite"></span>
           <span id="backup-status">No JSON backup created in this browser</span>
           <span class="counts" aria-label="Document counts">
@@ -286,6 +334,12 @@
       id="backup-file-input"
       type="file"
       accept=".json,application/json"
+      hidden
+    />
+    <input
+      id="safety-file-input"
+      type="file"
+      accept=".plainjot,application/json"
       hidden
     />
 
@@ -419,7 +473,8 @@
         <p id="clear-data-summary" class="dialog-copy"></p>
         <p class="dialog-copy">
           This removes PlainJot notes, preferences, and backup status from this
-          browser. Downloaded text and JSON files are not affected.
+          browser, including its Safety File connection. External Safety Files
+          and downloaded text or JSON files are not affected.
         </p>
         <p id="clear-data-error" class="dialog-error" role="alert" hidden></p>
       </div>
@@ -429,6 +484,59 @@
         <button id="clear-data-confirm" class="danger-confirm-button" type="button">
           Clear all data
         </button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="safety-open-dialog"
+      class="app-dialog"
+      aria-labelledby="safety-open-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="safety-open-dialog-title">Open Safety File</h2>
+        <button id="safety-open-close" class="dialog-close" type="button" aria-label="Cancel opening Safety File">×</button>
+      </div>
+      <div class="dialog-content">
+        <p id="safety-open-summary" class="dialog-copy"></p>
+        <p id="safety-open-error" class="dialog-error" role="alert" hidden></p>
+        <fieldset id="safety-open-options" class="restore-options">
+          <legend>Choose how to open this notebook</legend>
+          <label>
+            <input type="radio" name="safety-open-mode" value="replace" checked />
+            <span><strong>Replace</strong> — use the Safety File's notes and preferences.</span>
+          </label>
+          <label>
+            <input type="radio" name="safety-open-mode" value="merge" />
+            <span><strong>Merge</strong> — add its notes and keep local preferences.</span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="dialog-actions">
+        <span class="dialog-action-spacer"></span>
+        <button id="safety-open-cancel" type="button">Cancel</button>
+        <button id="safety-open-confirm" class="danger-confirm-button" type="button">Replace local notebook</button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="safety-conflict-dialog"
+      class="app-dialog"
+      aria-labelledby="safety-conflict-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="safety-conflict-dialog-title">Safety File changed</h2>
+        <button id="safety-conflict-close" class="dialog-close" type="button" aria-label="Close Safety File conflict">×</button>
+      </div>
+      <div class="dialog-content">
+        <p class="dialog-copy">Automatic updates are paused so neither copy is silently replaced. Choose which notebook to keep.</p>
+        <p id="safety-conflict-error" class="dialog-error" role="alert" hidden></p>
+      </div>
+      <div class="dialog-actions safety-conflict-actions">
+        <button id="safety-use-file" type="button">Use Safety File</button>
+        <button id="safety-overwrite-file" class="danger-confirm-button" type="button">Overwrite with local</button>
+        <span class="dialog-action-spacer"></span>
+        <button id="safety-conflict-disconnect" type="button">Disconnect</button>
+        <button id="safety-conflict-cancel" type="button">Cancel</button>
       </div>
     </dialog>
 
