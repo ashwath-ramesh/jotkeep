@@ -1,6 +1,17 @@
 import { createAutosave, SAVE_STATES } from "./autosave.js";
 import { clearEditor, countText, createEditorCommands } from "./editor.js";
 import {
+  currentMatchIndex,
+  findAdjacentMatch,
+  findMatches,
+  replaceAllLiteral,
+} from "./find-replace.js";
+import {
+  EMOJI,
+  SPECIAL_CHARACTERS,
+  formatCurrentDateTime,
+} from "./insert.js";
+import {
   LIST_VIEWS,
   addNote,
   chooseNeighborNoteId,
@@ -17,6 +28,7 @@ import { loadNotesDocument, saveNotesDocument } from "./storage.js";
 
 const AUTOSAVE_DELAY_MS = 500;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
+const TOOLBAR_BREAKPOINT = "(max-width: 68rem)";
 
 const titleInput = document.querySelector("#note-title");
 const note = document.querySelector("#note");
@@ -27,6 +39,9 @@ const characterCount = document.querySelector("#character-count");
 const moreButton = document.querySelector("#more-commands");
 const commandMenu = document.querySelector("#command-menu");
 const overflow = document.querySelector(".overflow");
+const insertButton = document.querySelector("#insert-button");
+const insertMenu = document.querySelector("#insert-menu");
+const insertPopup = insertButton.closest(".toolbar-popup");
 const sidebar = document.querySelector("#notes-sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
@@ -37,7 +52,24 @@ const listViewSelect = document.querySelector("#note-list-view");
 const notesList = document.querySelector("#notes-list");
 const notesEmptyState = document.querySelector("#notes-empty-state");
 const workspace = document.querySelector(".workspace");
+const findDialog = document.querySelector("#find-dialog");
+const findDialogTitle = document.querySelector("#find-dialog-title");
+const findQuery = document.querySelector("#find-query");
+const replaceFields = document.querySelector("#replace-fields");
+const replaceValue = document.querySelector("#replace-value");
+const matchCase = document.querySelector("#match-case");
+const wholeWord = document.querySelector("#whole-word");
+const findStatus = document.querySelector("#find-status");
+const findModeToggle = document.querySelector("#find-mode-toggle");
+const findPreviousButton = document.querySelector("#find-previous");
+const findNextButton = document.querySelector("#find-next");
+const replaceOneButton = document.querySelector("#replace-one");
+const replaceAllButton = document.querySelector("#replace-all");
+const pickerDialog = document.querySelector("#picker-dialog");
+const pickerDialogTitle = document.querySelector("#picker-dialog-title");
+const characterGrid = document.querySelector("#character-grid");
 const narrowLayout = window.matchMedia(MOBILE_BREAKPOINT);
+const compactToolbar = window.matchMedia(TOOLBAR_BREAKPOINT);
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -55,6 +87,10 @@ const loadedNotes = loadNotesDocument(browserStorage);
 let notesDocument = loadedNotes.document;
 let editorCommands;
 let sidebarOpen = !narrowLayout.matches;
+let findReplaceMode = false;
+let pickerSelection = null;
+let ignoredFindCloseEvents = 0;
+let ignoredPickerCloseEvents = 0;
 
 function activeNote() {
   return notesDocument.notes.find(
@@ -244,9 +280,35 @@ function closeMenu({ returnFocus = false } = {}) {
 }
 
 function openMenu() {
+  closeInsertMenu();
   commandMenu.hidden = false;
   moreButton.setAttribute("aria-expanded", "true");
   commandMenu.querySelector('[role="menuitem"]').focus();
+}
+
+function closeInsertMenu({ returnFocus = false } = {}) {
+  if (insertMenu.hidden) {
+    return;
+  }
+
+  insertMenu.hidden = true;
+  insertButton.setAttribute("aria-expanded", "false");
+
+  if (returnFocus) {
+    insertButton.focus();
+  }
+}
+
+function openInsertMenu() {
+  closeMenu();
+  insertMenu.hidden = false;
+  insertButton.setAttribute("aria-expanded", "true");
+  insertMenu.querySelector('[role="menuitem"]').focus();
+}
+
+function closeAllMenus() {
+  closeMenu();
+  closeInsertMenu();
 }
 
 moreButton.addEventListener("click", () => {
@@ -257,55 +319,367 @@ moreButton.addEventListener("click", () => {
   }
 });
 
-commandMenu.addEventListener("keydown", (event) => {
-  const items = [...commandMenu.querySelectorAll('[role="menuitem"]')];
-  const currentIndex = items.indexOf(document.activeElement);
-  let nextIndex;
-
-  switch (event.key) {
-    case "ArrowDown":
-      nextIndex = (currentIndex + 1) % items.length;
-      break;
-    case "ArrowUp":
-      nextIndex = (currentIndex - 1 + items.length) % items.length;
-      break;
-    case "Home":
-      nextIndex = 0;
-      break;
-    case "End":
-      nextIndex = items.length - 1;
-      break;
-    case "Escape":
-      event.preventDefault();
-      event.stopPropagation();
-      closeMenu({ returnFocus: true });
-      return;
-    case "Tab":
-      closeMenu();
-      return;
-    default:
-      return;
+insertButton.addEventListener("click", () => {
+  if (insertMenu.hidden) {
+    openInsertMenu();
+  } else {
+    closeInsertMenu({ returnFocus: true });
   }
-
-  event.preventDefault();
-  items[nextIndex].focus();
 });
+
+function addMenuKeyboardHandling(menu, close) {
+  menu.addEventListener("keydown", (event) => {
+    const items = [...menu.querySelectorAll('[role="menuitem"]')];
+    const currentIndex = items.indexOf(document.activeElement);
+    let nextIndex;
+
+    switch (event.key) {
+      case "ArrowDown":
+        nextIndex = (currentIndex + 1) % items.length;
+        break;
+      case "ArrowUp":
+        nextIndex = (currentIndex - 1 + items.length) % items.length;
+        break;
+      case "Home":
+        nextIndex = 0;
+        break;
+      case "End":
+        nextIndex = items.length - 1;
+        break;
+      case "Escape":
+        event.preventDefault();
+        event.stopPropagation();
+        close({ returnFocus: true });
+        return;
+      case "Tab":
+        close();
+        return;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    items[nextIndex].focus();
+  });
+}
+
+addMenuKeyboardHandling(commandMenu, closeMenu);
+addMenuKeyboardHandling(insertMenu, closeInsertMenu);
 
 document.addEventListener("pointerdown", (event) => {
   if (!commandMenu.hidden && !overflow.contains(event.target)) {
     closeMenu();
   }
+  if (!insertMenu.hidden && !insertPopup.contains(event.target)) {
+    closeInsertMenu();
+  }
 });
 
 for (const button of document.querySelectorAll("[data-command]")) {
   button.addEventListener("click", async () => {
-    closeMenu();
+    closeAllMenus();
     await editorCommands.execute(button.dataset.command);
   });
 }
 
+function findOptions() {
+  return {
+    matchCase: matchCase.checked,
+    wholeWord: wholeWord.checked,
+  };
+}
+
+function currentFindMatches() {
+  return findMatches(note.value, findQuery.value, findOptions());
+}
+
+function setFindStatus(message) {
+  findStatus.textContent = message;
+}
+
+function refreshFindStatus() {
+  if (findQuery.value === "") {
+    setFindStatus("Enter text to find.");
+    return;
+  }
+
+  const matches = currentFindMatches();
+
+  if (matches.length === 0) {
+    setFindStatus("No matches.");
+    return;
+  }
+
+  const currentIndex = currentMatchIndex(
+    matches,
+    editorCommands.getSelection(),
+  );
+  setFindStatus(
+    currentIndex === -1
+      ? pluralizedCount(matches.length, "match", "matches")
+      : `${currentIndex + 1} of ${matches.length}`,
+  );
+}
+
+function setFindMode(replaceMode) {
+  findReplaceMode = replaceMode;
+  findDialogTitle.textContent = replaceMode ? "Find and replace" : "Find";
+  replaceFields.hidden = !replaceMode;
+  replaceOneButton.hidden = !replaceMode;
+  replaceAllButton.hidden = !replaceMode;
+  findModeToggle.textContent = replaceMode ? "Hide replace" : "Show replace";
+  findModeToggle.setAttribute("aria-pressed", String(replaceMode));
+}
+
+function openFindDialog(replaceMode) {
+  closeAllMenus();
+
+  if (pickerDialog.open) {
+    pickerDialog.close();
+  }
+
+  if (sidebarOpen && narrowLayout.matches) {
+    setSidebarOpen(false);
+  }
+
+  setFindMode(replaceMode);
+
+  if (!findDialog.open) {
+    const selection = editorCommands.getSelection();
+    const selectedText = note.value.slice(selection.start, selection.end);
+
+    if (selectedText !== "") {
+      findQuery.value = selectedText;
+    }
+
+    findDialog.showModal();
+  }
+
+  refreshFindStatus();
+  findQuery.focus();
+  findQuery.select();
+}
+
+function navigateToMatch(direction) {
+  if (findQuery.value === "") {
+    setFindStatus("Enter text to find.");
+    return false;
+  }
+
+  const matches = currentFindMatches();
+  const adjacent = findAdjacentMatch(
+    matches,
+    editorCommands.getSelection(),
+    direction,
+  );
+
+  if (adjacent === null) {
+    setFindStatus("No matches.");
+    return false;
+  }
+
+  editorCommands.selectRange(adjacent.match.start, adjacent.match.end);
+  setFindStatus(
+    `${adjacent.index + 1} of ${matches.length}${
+      adjacent.wrapped ? " · Wrapped" : ""
+    }`,
+  );
+  return true;
+}
+
+function runFindDialogMutation(mutation, returnFocus) {
+  ignoredFindCloseEvents += 1;
+  findDialog.close();
+  mutation();
+  findDialog.showModal();
+  returnFocus.focus();
+}
+
+function replaceCurrentMatch() {
+  if (findQuery.value === "") {
+    setFindStatus("Enter text to find.");
+    return;
+  }
+
+  const matches = currentFindMatches();
+  const selection = editorCommands.getSelection();
+  const matchIndex = currentMatchIndex(matches, selection);
+
+  if (matchIndex === -1) {
+    navigateToMatch("next");
+    return;
+  }
+
+  const replacement = replaceValue.value;
+  runFindDialogMutation(() => {
+    editorCommands.replaceRange(selection, replacement);
+    const remainingMatches = currentFindMatches();
+
+    if (remainingMatches.length === 0) {
+      setFindStatus("Replaced 1 match. No matches remain.");
+    } else {
+      const adjacent = findAdjacentMatch(
+        remainingMatches,
+        editorCommands.getSelection(),
+        "next",
+      );
+      editorCommands.selectRange(adjacent.match.start, adjacent.match.end);
+      setFindStatus(
+        `Replaced 1 match. ${adjacent.index + 1} of ${remainingMatches.length}${
+          adjacent.wrapped ? " · Wrapped" : ""
+        }`,
+      );
+    }
+  }, replaceOneButton);
+}
+
+function replaceEveryMatch() {
+  if (findQuery.value === "") {
+    setFindStatus("Enter text to find.");
+    return;
+  }
+
+  const result = replaceAllLiteral(
+    note.value,
+    findQuery.value,
+    replaceValue.value,
+    findOptions(),
+  );
+
+  if (result.count === 0) {
+    setFindStatus("No matches.");
+    return;
+  }
+
+  runFindDialogMutation(() => {
+    editorCommands.replaceRange(
+      { start: 0, end: note.value.length, direction: "none" },
+      result.text,
+    );
+    editorCommands.selectRange(result.caret, result.caret);
+    setFindStatus(
+      `Replaced ${pluralizedCount(result.count, "match", "matches")}.`,
+    );
+  }, replaceAllButton);
+}
+
+findModeToggle.addEventListener("click", () => {
+  setFindMode(!findReplaceMode);
+  if (findReplaceMode) {
+    replaceValue.focus();
+  }
+});
+findPreviousButton.addEventListener("click", () => navigateToMatch("previous"));
+findNextButton.addEventListener("click", () => navigateToMatch("next"));
+replaceOneButton.addEventListener("click", replaceCurrentMatch);
+replaceAllButton.addEventListener("click", replaceEveryMatch);
+findQuery.addEventListener("input", refreshFindStatus);
+matchCase.addEventListener("change", refreshFindStatus);
+wholeWord.addEventListener("change", refreshFindStatus);
+
+findDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  findDialog.close();
+});
+findDialog.addEventListener("close", () => {
+  if (ignoredFindCloseEvents > 0) {
+    ignoredFindCloseEvents -= 1;
+    return;
+  }
+
+  editorCommands.restoreSelection();
+});
+
+for (const button of document.querySelectorAll('[data-action="find"]')) {
+  button.addEventListener("click", () => openFindDialog(false));
+}
+
+for (const button of document.querySelectorAll('[data-action="replace"]')) {
+  button.addEventListener("click", () => openFindDialog(true));
+}
+
+function openCharacterPicker(kind) {
+  closeAllMenus();
+
+  if (findDialog.open) {
+    findDialog.close();
+  }
+
+  pickerSelection = editorCommands.getSelection();
+  const isEmoji = kind === "emoji";
+  const palette = isEmoji ? EMOJI : SPECIAL_CHARACTERS;
+  pickerDialogTitle.textContent = isEmoji
+    ? "Insert emoji"
+    : "Insert special character";
+  characterGrid.dataset.kind = kind;
+  const fragment = document.createDocumentFragment();
+
+  for (const [value, label] of palette) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.character = value;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.textContent = value;
+    fragment.append(button);
+  }
+
+  characterGrid.replaceChildren(fragment);
+  pickerDialog.showModal();
+  characterGrid.querySelector("button").focus();
+}
+
+characterGrid.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-character]");
+
+  if (!button) {
+    return;
+  }
+
+  const selection = pickerSelection;
+  ignoredPickerCloseEvents += 1;
+  pickerDialog.close();
+  editorCommands.insertText(button.dataset.character, selection);
+  pickerSelection = null;
+});
+
+pickerDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  pickerDialog.close();
+});
+pickerDialog.addEventListener("close", () => {
+  if (ignoredPickerCloseEvents > 0) {
+    ignoredPickerCloseEvents -= 1;
+    return;
+  }
+
+  editorCommands.restoreSelection(pickerSelection);
+  pickerSelection = null;
+});
+
+for (const button of document.querySelectorAll("[data-picker]")) {
+  button.addEventListener("click", () =>
+    openCharacterPicker(button.dataset.picker),
+  );
+}
+
+for (const button of document.querySelectorAll('[data-insert="date-time"]')) {
+  button.addEventListener("click", () => {
+    closeAllMenus();
+    editorCommands.insertText(formatCurrentDateTime());
+  });
+}
+
+for (const button of document.querySelectorAll("[data-close-dialog]")) {
+  button.addEventListener("click", () => {
+    const dialog =
+      button.dataset.closeDialog === "find" ? findDialog : pickerDialog;
+    dialog.close();
+  });
+}
+
 function clearActiveNote() {
-  closeMenu();
+  closeAllMenus();
   clearEditor({
     titleInput,
     textarea: note,
@@ -369,6 +743,26 @@ sidebarBackdrop.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const shortcutKey = event.key.toLowerCase();
+
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
+    if (shortcutKey === "f") {
+      event.preventDefault();
+      openFindDialog(false);
+      return;
+    }
+
+    if (shortcutKey === "h") {
+      event.preventDefault();
+      openFindDialog(true);
+      return;
+    }
+  }
+
   if (event.key === "Escape" && sidebarOpen && narrowLayout.matches) {
     event.preventDefault();
     setSidebarOpen(false, { returnFocus: true });
@@ -376,9 +770,11 @@ document.addEventListener("keydown", (event) => {
 });
 
 narrowLayout.addEventListener("change", (event) => {
-  closeMenu();
+  closeAllMenus();
   setSidebarOpen(!event.matches);
 });
+
+compactToolbar.addEventListener("change", closeAllMenus);
 
 function selectSavedNote(noteId) {
   if (noteId !== notesDocument.activeNoteId) {

@@ -10,7 +10,7 @@ name, copy, branding, or proprietary assets.
 
 ## Project status
 
-Phase 2 is complete. The repository contains a modular, dependency-free
+Phase 3 is complete. The repository contains a modular, dependency-free
 multiple-note application with:
 
 - a titled, spellchecked plain-text editor with a responsive notes sidebar;
@@ -19,7 +19,9 @@ multiple-note application with:
 - debounced, versioned `localStorage` persistence and lossless migration from
   both earlier single-note formats;
 - visible save state plus live word and character counts;
-- familiar editing commands and confirmed clearing; and
+- familiar editing commands and confirmed clearing;
+- literal find and replace with case and whole-word options;
+- date-time, special-character, and emoji insertion tools; and
 - an accessible toolbar that adapts to narrow screens.
 
 Later phases in this README remain the implementation roadmap. Check an item
@@ -108,13 +110,13 @@ Acceptance criteria:
 
 ### Phase 3 — Find, replace, and insert tools
 
-- [ ] Find the next and previous match in the active note
-- [ ] Replace one match or all matches
-- [ ] Support match-case and whole-word options
-- [ ] Insert the current date and time at the cursor
-- [ ] Insert a special character at the cursor
-- [ ] Insert an emoji at the cursor
-- [ ] Preserve selection and cursor position when a dialog closes
+- [x] Find the next and previous match in the active note
+- [x] Replace one match or all matches
+- [x] Support match-case and whole-word options
+- [x] Insert the current date and time at the cursor
+- [x] Insert a special character at the cursor
+- [x] Insert an emoji at the cursor
+- [x] Preserve selection and cursor position when a dialog closes
 
 Acceptance criteria:
 
@@ -240,12 +242,16 @@ framework or build step:
 │   ├── app.js             # initialization and event wiring
 │   ├── autosave.js        # debounce, flush, and save-state transitions
 │   ├── editor.js          # selection and text-editing commands
+│   ├── find-replace.js    # literal matching and replacement helpers
+│   ├── insert.js          # insertion palettes and date-time formatting
 │   ├── notes.js           # note operations, filtering, and sorting
 │   ├── storage.js         # versioned persistence and legacy migration
 │   └── styles.css
 └── tests/
     ├── autosave.test.js
     ├── editor.test.js
+    ├── find-replace.test.js
+    ├── insert.test.js
     ├── notes.test.js
     └── storage.test.js
 ```

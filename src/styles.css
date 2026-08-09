@@ -470,8 +470,12 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.overflow {
+.overflow,
+.toolbar-popup {
   position: relative;
+}
+
+.overflow {
   margin-left: auto;
 }
 
@@ -481,7 +485,9 @@ textarea:focus-visible {
   right: 0;
   display: grid;
   width: min(13rem, calc(100vw - 2.5rem));
+  max-height: min(70vh, 32rem);
   padding: 0.375rem;
+  overflow-y: auto;
   border: 1px solid #d4d4d4;
   border-radius: 0.5rem;
   background: var(--surface);
@@ -500,8 +506,173 @@ textarea:focus-visible {
   border-radius: 0 0 0.3rem 0.3rem;
 }
 
+.menu-separator {
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+  background: var(--line);
+}
+
+.app-dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 22%);
+}
+
+.app-dialog::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.dialog-header {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+}
+
+.dialog-close {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  margin-left: auto;
+  color: var(--muted-ink);
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.dialog-content {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+.dialog-content > label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.dialog-content textarea {
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.375rem;
+  resize: vertical;
+  background: var(--surface);
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+#replace-fields {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+#replace-fields label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.find-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  border: 0;
+}
+
+.find-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+}
+
+.dialog-status,
+.picker-instructions {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.dialog-status {
+  min-height: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem 1.25rem;
+}
+
+.dialog-actions button:not(.primary-button) {
+  border-color: #d4d4d4;
+}
+
+.dialog-action-spacer {
+  flex: 1;
+}
+
+.picker-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.picker-instructions {
+  padding: 1rem 1.25rem 0;
+}
+
+.character-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr));
+  gap: 0.375rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.character-grid button {
+  min-width: 0;
+  min-height: 3rem;
+  padding: 0.25rem;
+  border-color: var(--line);
+  background: var(--subtle-surface);
+  font-size: 1.25rem;
+}
+
+.character-grid[data-kind="emoji"] button {
+  font-size: 1.5rem;
+}
+
 .sidebar-backdrop {
   display: none;
+}
+
+@media (max-width: 68rem) {
+  .desktop-commands {
+    display: none;
+  }
+
+  .mobile-commands {
+    display: flex;
+  }
 }
 
 @media (max-width: 48rem) {

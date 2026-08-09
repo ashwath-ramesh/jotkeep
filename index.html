@@ -94,11 +94,36 @@
             <button type="button" data-command="undo">Undo</button>
             <button type="button" data-command="redo">Redo</button>
             <span class="toolbar-separator" aria-hidden="true"></span>
+            <button type="button" data-action="find">Find</button>
+            <button type="button" data-action="replace">Replace</button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
             <button type="button" data-command="cut">Cut</button>
             <button type="button" data-command="copy">Copy</button>
             <button type="button" data-command="paste">Paste</button>
             <button type="button" data-command="delete">Delete</button>
             <button type="button" data-command="select-all">Select all</button>
+            <div class="toolbar-popup">
+              <button
+                id="insert-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="insert-menu"
+              >
+                Insert
+              </button>
+              <div id="insert-menu" class="command-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-insert="date-time">
+                  Date and time
+                </button>
+                <button type="button" role="menuitem" data-picker="symbols">
+                  Special character…
+                </button>
+                <button type="button" role="menuitem" data-picker="emoji">
+                  Emoji…
+                </button>
+              </div>
+            </div>
             <span class="toolbar-spacer"></span>
             <button class="danger-button" type="button" data-action="clear">
               Clear
@@ -119,6 +144,13 @@
                 More
               </button>
               <div id="command-menu" class="command-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-action="find">
+                  Find…
+                </button>
+                <button type="button" role="menuitem" data-action="replace">
+                  Find and replace…
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-command="cut">Cut</button>
                 <button type="button" role="menuitem" data-command="copy">
                   Copy
@@ -132,6 +164,17 @@
                 <button type="button" role="menuitem" data-command="select-all">
                   Select all
                 </button>
+                <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-insert="date-time">
+                  Insert date and time
+                </button>
+                <button type="button" role="menuitem" data-picker="symbols">
+                  Insert special character…
+                </button>
+                <button type="button" role="menuitem" data-picker="emoji">
+                  Insert emoji…
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button
                   class="danger-button"
                   type="button"
@@ -169,6 +212,75 @@
         </footer>
       </section>
     </main>
+
+    <dialog
+      id="find-dialog"
+      class="app-dialog find-dialog"
+      aria-labelledby="find-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="find-dialog-title">Find</h2>
+        <button
+          class="dialog-close"
+          type="button"
+          data-close-dialog="find"
+          aria-label="Close find dialog"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="dialog-content">
+        <label for="find-query">Find</label>
+        <textarea id="find-query" rows="2" autocomplete="off"></textarea>
+
+        <div id="replace-fields" hidden>
+          <label for="replace-value">Replace with</label>
+          <textarea id="replace-value" rows="2" autocomplete="off"></textarea>
+        </div>
+
+        <fieldset class="find-options">
+          <legend class="visually-hidden">Find options</legend>
+          <label><input id="match-case" type="checkbox" /> Match case</label>
+          <label><input id="whole-word" type="checkbox" /> Whole word</label>
+        </fieldset>
+
+        <p id="find-status" class="dialog-status" role="status" aria-live="polite">
+          Enter text to find.
+        </p>
+      </div>
+
+      <div class="dialog-actions find-actions">
+        <button id="find-mode-toggle" type="button" aria-pressed="false">
+          Show replace
+        </button>
+        <span class="dialog-action-spacer"></span>
+        <button id="find-previous" type="button">Previous</button>
+        <button id="find-next" class="primary-button" type="button">Next</button>
+        <button id="replace-one" type="button" hidden>Replace</button>
+        <button id="replace-all" type="button" hidden>Replace all</button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="picker-dialog"
+      class="app-dialog picker-dialog"
+      aria-labelledby="picker-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="picker-dialog-title">Insert special character</h2>
+        <button
+          class="dialog-close"
+          type="button"
+          data-close-dialog="picker"
+          aria-label="Close character picker"
+        >
+          ×
+        </button>
+      </div>
+      <p class="picker-instructions">Choose an item to insert it at the cursor.</p>
+      <div id="character-grid" class="character-grid"></div>
+    </dialog>
 
     <script type="module" src="src/app.js"></script>
   </body>

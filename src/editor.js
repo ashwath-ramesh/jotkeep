@@ -86,6 +86,10 @@ export function createEditorCommands(
     savedSelection = readSelection();
   }
 
+  function getSelection() {
+    return { ...savedSelection };
+  }
+
   function restoreSelection(selection = savedSelection) {
     const length = textarea.value.length;
     const start = Math.min(selection.start, length);
@@ -148,10 +152,12 @@ export function createEditorCommands(
 
     let inserted = false;
 
-    try {
-      inserted = documentObject.execCommand("insertText", false, replacement);
-    } catch {
-      inserted = false;
+    if (documentObject.activeElement === textarea) {
+      try {
+        inserted = documentObject.execCommand("insertText", false, replacement);
+      } catch {
+        inserted = false;
+      }
     }
 
     textarea.removeEventListener("input", noticeInput);
@@ -353,7 +359,16 @@ export function createEditorCommands(
 
   return {
     execute,
+    getSelection,
+    insertText: (text, selection = savedSelection) =>
+      replaceRange({ ...selection }, text),
     invalidatePendingCommands,
     rememberSelection,
+    replaceRange: (selection, replacement) =>
+      replaceRange({ ...selection }, replacement),
+    restoreSelection: (selection = savedSelection) =>
+      restoreSelection({ ...selection }),
+    selectRange: (start, end, direction = "none") =>
+      restoreSelection({ start, end, direction }),
   };
 }

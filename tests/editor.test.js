@@ -23,6 +23,7 @@ class FakeTextarea extends EventTarget {
 
   focus() {
     this.focused = true;
+    this.ownerDocument.activeElement = this;
     this.dispatchEvent(new Event("focus"));
   }
 
@@ -160,6 +161,90 @@ test("invalidating a pending paste prevents it from changing a new note", async 
 
   assert.equal(textarea.value, "");
   assert.equal(inputEvents, 0);
+});
+
+test("insertText inserts at the saved caret and dispatches one input event", () => {
+  const textarea = new FakeTextarea("AB", 1);
+  const commands = createEditorCommands(textarea);
+  let inputEvents = 0;
+  textarea.addEventListener("input", () => {
+    inputEvents += 1;
+  });
+
+  assert.equal(commands.insertText("😀"), true);
+  assert.equal(textarea.value, "A😀B");
+  assert.deepEqual(commands.getSelection(), {
+    start: 3,
+    end: 3,
+    direction: "none",
+  });
+  assert.equal(inputEvents, 1);
+});
+
+test("insertText uses the native edit path when the editor owns focus", () => {
+  const textarea = new FakeTextarea("AB", 1);
+  let nativeEdits = 0;
+  textarea.ownerDocument.execCommand = (command, _showUI, replacement) => {
+    assert.equal(command, "insertText");
+    nativeEdits += 1;
+    textarea.setRangeText(
+      replacement,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+    );
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  };
+  const commands = createEditorCommands(textarea);
+
+  commands.insertText("X");
+
+  assert.equal(nativeEdits, 1);
+  assert.equal(textarea.value, "AXB");
+});
+
+test("insertText never sends native edits to a focused dialog field", () => {
+  const textarea = new FakeTextarea("AB", 1);
+  const dialogField = { value: "replacement" };
+  let nativeEdits = 0;
+  textarea.ownerDocument.activeElement = dialogField;
+  textarea.focus = () => {
+    textarea.focused = true;
+    textarea.dispatchEvent(new Event("focus"));
+  };
+  textarea.ownerDocument.execCommand = (_command, _showUI, replacement) => {
+    nativeEdits += 1;
+    dialogField.value += replacement;
+    return true;
+  };
+  const commands = createEditorCommands(textarea);
+
+  commands.insertText("X");
+
+  assert.equal(nativeEdits, 0);
+  assert.equal(dialogField.value, "replacement");
+  assert.equal(textarea.value, "AXB");
+});
+
+test("insertText replaces a saved selection and selection APIs restore it", () => {
+  const textarea = new FakeTextarea("replace this", 0, 7);
+  const commands = createEditorCommands(textarea);
+
+  textarea.setSelectionRange(12, 12);
+  assert.equal(commands.insertText("Keep"), true);
+  assert.equal(textarea.value, "Keep this");
+  assert.deepEqual(commands.getSelection(), {
+    start: 4,
+    end: 4,
+    direction: "none",
+  });
+
+  commands.selectRange(0, 4, "backward");
+  assert.deepEqual(commands.getSelection(), {
+    start: 0,
+    end: 4,
+    direction: "backward",
+  });
 });
 
 test("cancelling clear preserves the note and restores editor focus", () => {
