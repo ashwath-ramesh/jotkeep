@@ -12,96 +12,162 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="title-bar">
-        <label class="visually-hidden" for="note-title">Note title</label>
-        <input
-          class="title-input"
-          id="note-title"
-          name="note-title"
-          type="text"
-          placeholder="Untitled Note"
-          autocomplete="off"
-        />
-      </header>
+      <button
+        id="sidebar-backdrop"
+        class="sidebar-backdrop"
+        type="button"
+        aria-label="Close notes panel"
+        hidden
+      ></button>
 
-      <div class="toolbar" role="toolbar" aria-label="Editing commands">
-        <div class="desktop-commands">
-          <button type="button" data-command="undo">Undo</button>
-          <button type="button" data-command="redo">Redo</button>
-          <span class="toolbar-separator" aria-hidden="true"></span>
-          <button type="button" data-command="cut">Cut</button>
-          <button type="button" data-command="copy">Copy</button>
-          <button type="button" data-command="paste">Paste</button>
-          <button type="button" data-command="delete">Delete</button>
-          <button type="button" data-command="select-all">Select all</button>
-          <span class="toolbar-spacer"></span>
-          <button class="danger-button" type="button" data-action="clear">
-            Clear
+      <aside id="notes-sidebar" class="notes-sidebar" aria-label="Notes" hidden>
+        <div class="notes-header">
+          <div>
+            <p class="eyebrow">Browser Notepad</p>
+            <h1>Notes</h1>
+          </div>
+          <button id="new-note" class="primary-button" type="button">
+            New note
           </button>
         </div>
 
-        <div class="mobile-commands">
-          <button type="button" data-command="undo">Undo</button>
-          <button type="button" data-command="redo">Redo</button>
-          <div class="overflow">
-            <button
-              id="more-commands"
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded="false"
-              aria-controls="command-menu"
-            >
-              More
+        <div class="notes-controls">
+          <label class="visually-hidden" for="note-search">Search notes</label>
+          <input
+            id="note-search"
+            class="search-input"
+            type="search"
+            placeholder="Search notes…"
+            autocomplete="off"
+          />
+
+          <div class="list-options">
+            <label class="visually-hidden" for="note-sort">Sort notes</label>
+            <select id="note-sort" aria-label="Sort notes">
+              <option value="updatedAt">Last modified</option>
+              <option value="createdAt">Creation date</option>
+              <option value="title">Alphabetical</option>
+            </select>
+
+            <label class="visually-hidden" for="note-list-view">
+              Note list view
+            </label>
+            <select id="note-list-view" aria-label="Note list view">
+              <option value="detailed">Detailed</option>
+              <option value="compact">Compact</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="notes-results">
+          <ul id="notes-list" class="notes-list" aria-label="Saved notes"></ul>
+          <p id="notes-empty-state" class="notes-empty-state" role="status" hidden></p>
+        </div>
+      </aside>
+
+      <section class="workspace" aria-label="Active note">
+        <header class="title-bar">
+          <button
+            id="sidebar-toggle"
+            class="sidebar-toggle"
+            type="button"
+            aria-controls="notes-sidebar"
+            aria-expanded="false"
+            aria-label="Show notes panel"
+          >
+            <span aria-hidden="true">☰</span>
+            <span class="sidebar-toggle-label">Notes</span>
+          </button>
+          <label class="visually-hidden" for="note-title">Note title</label>
+          <input
+            class="title-input"
+            id="note-title"
+            name="note-title"
+            type="text"
+            placeholder="Untitled Note"
+            autocomplete="off"
+          />
+        </header>
+
+        <div class="toolbar" role="toolbar" aria-label="Editing commands">
+          <div class="desktop-commands">
+            <button type="button" data-command="undo">Undo</button>
+            <button type="button" data-command="redo">Redo</button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button type="button" data-command="cut">Cut</button>
+            <button type="button" data-command="copy">Copy</button>
+            <button type="button" data-command="paste">Paste</button>
+            <button type="button" data-command="delete">Delete</button>
+            <button type="button" data-command="select-all">Select all</button>
+            <span class="toolbar-spacer"></span>
+            <button class="danger-button" type="button" data-action="clear">
+              Clear
             </button>
-            <div id="command-menu" class="command-menu" role="menu" hidden>
-              <button type="button" role="menuitem" data-command="cut">Cut</button>
-              <button type="button" role="menuitem" data-command="copy">
-                Copy
-              </button>
-              <button type="button" role="menuitem" data-command="paste">
-                Paste
-              </button>
-              <button type="button" role="menuitem" data-command="delete">
-                Delete
-              </button>
-              <button type="button" role="menuitem" data-command="select-all">
-                Select all
-              </button>
+          </div>
+
+          <div class="mobile-commands">
+            <button type="button" data-command="undo">Undo</button>
+            <button type="button" data-command="redo">Redo</button>
+            <div class="overflow">
               <button
-                class="danger-button"
+                id="more-commands"
                 type="button"
-                role="menuitem"
-                data-action="clear"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="command-menu"
               >
-                Clear note
+                More
               </button>
+              <div id="command-menu" class="command-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-command="cut">Cut</button>
+                <button type="button" role="menuitem" data-command="copy">
+                  Copy
+                </button>
+                <button type="button" role="menuitem" data-command="paste">
+                  Paste
+                </button>
+                <button type="button" role="menuitem" data-command="delete">
+                  Delete
+                </button>
+                <button type="button" role="menuitem" data-command="select-all">
+                  Select all
+                </button>
+                <button
+                  class="danger-button"
+                  type="button"
+                  role="menuitem"
+                  data-action="clear"
+                >
+                  Clear note
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <section class="editor-panel" aria-label="Note editor">
-        <label class="visually-hidden" for="note">Note body</label>
-        <textarea
-          class="notepad"
-          id="note"
-          name="note"
-          placeholder="Start typing…"
-          autofocus
-          spellcheck="true"
-          autocapitalize="sentences"
-        ></textarea>
+        <section class="editor-panel" aria-label="Note editor">
+          <label class="visually-hidden" for="note">Note body</label>
+          <textarea
+            class="notepad"
+            id="note"
+            name="note"
+            placeholder="Start typing…"
+            autofocus
+            spellcheck="true"
+            autocapitalize="sentences"
+          ></textarea>
+        </section>
+
+        <footer class="status-bar">
+          <span id="save-state" role="status" aria-live="polite">Saved</span>
+          <span id="command-feedback" role="status" aria-live="polite"></span>
+          <span class="counts" aria-label="Document counts">
+            <span id="word-count">0 words</span>
+            <span aria-hidden="true">·</span>
+            <span id="character-count">0 characters</span>
+          </span>
+        </footer>
       </section>
-
-      <footer class="status-bar">
-        <span id="save-state" role="status" aria-live="polite">Saved</span>
-        <span id="command-feedback" role="status" aria-live="polite"></span>
-        <span class="counts" aria-label="Document counts">
-          <span id="word-count">0 words</span>
-          <span aria-hidden="true">·</span>
-          <span id="character-count">0 characters</span>
-        </span>
-      </footer>
     </main>
 
     <script type="module" src="src/app.js"></script>

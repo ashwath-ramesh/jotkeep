@@ -4,9 +4,13 @@ import assert from "node:assert/strict";
 import {
   DOCUMENT_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
+  NOTES_DOCUMENT_STORAGE_KEY,
   createEmptyDocument,
+  createNotesDocument,
   loadDocument,
+  loadNotesDocument,
   saveDocument,
+  saveNotesDocument,
 } from "../src/storage.js";
 
 class MemoryStorage {
@@ -114,4 +118,130 @@ test("saveDocument rejects unavailable storage and invalid records", () => {
       title: "Missing body",
     }),
   );
+});
+
+const MIGRATION_TIME = "2026-08-09T12:00:00.000Z";
+const migrationOptions = {
+  idFactory: () => "note_migrated",
+  now: () => new Date(MIGRATION_TIME),
+};
+
+test("version-2 notes documents round-trip collection state and preferences", () => {
+  const storage = new MemoryStorage();
+  const document = createNotesDocument(migrationOptions);
+  document.notes[0].title = "Shopping";
+  document.notes[0].content = "Tea\nCoffee";
+  document.notes.push({
+    id: "note_active",
+    title: "Selected note",
+    content: "This note should remain selected.",
+    createdAt: MIGRATION_TIME,
+    updatedAt: MIGRATION_TIME,
+  });
+  document.activeNoteId = "note_active";
+  document.preferences.sortBy = "title";
+  document.preferences.listView = "compact";
+
+  saveNotesDocument(storage, document);
+
+  assert.deepEqual(loadNotesDocument(storage, migrationOptions), {
+    document,
+    storageAvailable: true,
+    migrated: false,
+    canSave: true,
+  });
+});
+
+test("loadNotesDocument migrates the structured single note and retains it", () => {
+  const legacyDocument = {
+    version: 1,
+    title: "Existing title",
+    body: "Existing body",
+  };
+  const storage = new MemoryStorage({
+    [DOCUMENT_STORAGE_KEY]: JSON.stringify(legacyDocument),
+  });
+
+  const result = loadNotesDocument(storage, migrationOptions);
+
+  assert.equal(result.migrated, true);
+  assert.equal(result.storageAvailable, true);
+  assert.equal(result.document.notes[0].title, "Existing title");
+  assert.equal(result.document.notes[0].content, "Existing body");
+  assert.equal(result.document.activeNoteId, "note_migrated");
+  assert.equal(
+    storage.getItem(DOCUMENT_STORAGE_KEY),
+    JSON.stringify(legacyDocument),
+  );
+  assert.equal(
+    storage.getItem(NOTES_DOCUMENT_STORAGE_KEY),
+    JSON.stringify(result.document),
+  );
+});
+
+test("loadNotesDocument migrates the body-only note and retains it", () => {
+  const storage = new MemoryStorage({
+    [LEGACY_STORAGE_KEY]: "Original body",
+  });
+
+  const result = loadNotesDocument(storage, migrationOptions);
+
+  assert.equal(result.document.notes[0].content, "Original body");
+  assert.equal(result.document.notes[0].title, "");
+  assert.equal(storage.getItem(LEGACY_STORAGE_KEY), "Original body");
+  assert.equal(result.migrated, true);
+});
+
+test("a failed migration keeps content in memory and leaves legacy data intact", () => {
+  const legacyDocument = { version: 1, title: "Kept", body: "Safe" };
+  const storage = new MemoryStorage({
+    [DOCUMENT_STORAGE_KEY]: JSON.stringify(legacyDocument),
+  });
+  storage.setItem = () => {
+    throw new Error("quota exceeded");
+  };
+
+  const result = loadNotesDocument(storage, migrationOptions);
+
+  assert.equal(result.document.notes[0].title, "Kept");
+  assert.equal(result.document.notes[0].content, "Safe");
+  assert.equal(result.storageAvailable, false);
+  assert.equal(result.migrated, false);
+  assert.equal(result.canSave, true);
+  assert.equal(
+    storage.getItem(DOCUMENT_STORAGE_KEY),
+    JSON.stringify(legacyDocument),
+  );
+});
+
+test("a malformed version-2 value is never replaced by legacy content", () => {
+  const storage = new MemoryStorage({
+    [NOTES_DOCUMENT_STORAGE_KEY]: "{malformed",
+    [DOCUMENT_STORAGE_KEY]: JSON.stringify({
+      version: 1,
+      title: "Older",
+      body: "Older body",
+    }),
+  });
+
+  const result = loadNotesDocument(storage, migrationOptions);
+
+  assert.equal(result.storageAvailable, false);
+  assert.equal(result.canSave, false);
+  assert.equal(storage.getItem(NOTES_DOCUMENT_STORAGE_KEY), "{malformed");
+  assert.equal(result.document.notes[0].content, "");
+});
+
+test("saveNotesDocument rejects invalid collection relationships and dates", () => {
+  const storage = new MemoryStorage();
+  const invalidActiveNote = createNotesDocument(migrationOptions);
+  invalidActiveNote.activeNoteId = "note_missing";
+  const invalidDate = createNotesDocument(migrationOptions);
+  invalidDate.notes[0].updatedAt = "yesterday";
+  const duplicateId = createNotesDocument(migrationOptions);
+  duplicateId.notes.push({ ...duplicateId.notes[0] });
+
+  assert.throws(() => saveNotesDocument(storage, invalidActiveNote));
+  assert.throws(() => saveNotesDocument(storage, invalidDate));
+  assert.throws(() => saveNotesDocument(storage, duplicateId));
 });

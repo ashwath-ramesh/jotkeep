@@ -64,6 +64,15 @@ export function createEditorCommands(
 ) {
   const documentObject = textarea.ownerDocument;
   let savedSelection = readSelection();
+  let commandGeneration = 0;
+
+  function isCurrentCommand(generation) {
+    return generation === commandGeneration;
+  }
+
+  function invalidatePendingCommands() {
+    commandGeneration += 1;
+  }
 
   function readSelection() {
     return {
@@ -177,20 +186,28 @@ export function createEditorCommands(
     }
   }
 
-  async function copySelection(selection, text) {
+  async function copySelection(selection, text, generation) {
     if (navigatorObject?.clipboard?.writeText) {
       try {
         await navigatorObject.clipboard.writeText(text);
         return true;
       } catch {
+        if (!isCurrentCommand(generation)) {
+          return false;
+        }
+
         // Fall through to the browser's native command.
       }
+    }
+
+    if (!isCurrentCommand(generation)) {
+      return false;
     }
 
     return execClipboardFallback("copy", selection);
   }
 
-  async function copy() {
+  async function copy(generation) {
     const selection = savedSelection;
     const selectedText = textarea.value.slice(selection.start, selection.end);
 
@@ -200,14 +217,20 @@ export function createEditorCommands(
       return;
     }
 
-    if (!(await copySelection(selection, selectedText))) {
+    const copied = await copySelection(selection, selectedText, generation);
+
+    if (!isCurrentCommand(generation)) {
+      return;
+    }
+
+    if (!copied) {
       report("Clipboard access is unavailable.");
     }
 
     restoreSelection(selection);
   }
 
-  async function cut() {
+  async function cut(generation) {
     const selection = savedSelection;
     const originalValue = textarea.value;
     const selectedText = originalValue.slice(selection.start, selection.end);
@@ -218,7 +241,13 @@ export function createEditorCommands(
       return;
     }
 
-    if (!(await copySelection(selection, selectedText))) {
+    const copied = await copySelection(selection, selectedText, generation);
+
+    if (!isCurrentCommand(generation)) {
+      return;
+    }
+
+    if (!copied) {
       report("Clipboard access is unavailable.");
       restoreSelection(selection);
       return;
@@ -232,13 +261,17 @@ export function createEditorCommands(
     replaceRange(selection, "");
   }
 
-  async function paste() {
+  async function paste(generation) {
     const selection = savedSelection;
     const originalValue = textarea.value;
 
     if (navigatorObject?.clipboard?.readText) {
       try {
         const clipboardText = await navigatorObject.clipboard.readText();
+
+        if (!isCurrentCommand(generation)) {
+          return;
+        }
 
         if (textarea.value !== originalValue) {
           report("The note changed before the paste completed.");
@@ -248,8 +281,16 @@ export function createEditorCommands(
         replaceRange(selection, clipboardText);
         return;
       } catch {
+        if (!isCurrentCommand(generation)) {
+          return;
+        }
+
         // Fall through to the browser's native command.
       }
+    }
+
+    if (!isCurrentCommand(generation)) {
+      return;
     }
 
     if (!runNativeCommand("paste")) {
@@ -270,6 +311,7 @@ export function createEditorCommands(
   }
 
   async function execute(command) {
+    const generation = commandGeneration;
     report("");
 
     switch (command) {
@@ -284,13 +326,13 @@ export function createEditorCommands(
         }
         break;
       case "cut":
-        await cut();
+        await cut(generation);
         break;
       case "copy":
-        await copy();
+        await copy(generation);
         break;
       case "paste":
-        await paste();
+        await paste(generation);
         break;
       case "delete":
         deleteText();
@@ -311,6 +353,7 @@ export function createEditorCommands(
 
   return {
     execute,
+    invalidatePendingCommands,
     rememberSelection,
   };
 }

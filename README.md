@@ -10,11 +10,14 @@ name, copy, branding, or proprietary assets.
 
 ## Project status
 
-Phase 1 is complete. The repository contains a modular, dependency-free
-single-note application with:
+Phase 2 is complete. The repository contains a modular, dependency-free
+multiple-note application with:
 
-- a titled, spellchecked plain-text editor;
-- debounced, versioned `localStorage` persistence and legacy-draft migration;
+- a titled, spellchecked plain-text editor with a responsive notes sidebar;
+- note creation, selection, renaming, confirmed deletion, search, and sorting;
+- compact and detailed note-list views with a persistent active note;
+- debounced, versioned `localStorage` persistence and lossless migration from
+  both earlier single-note formats;
 - visible save state plus live word and character counts;
 - familiar editing commands and confirmed clearing; and
 - an accessible toolbar that adapts to narrow screens.
@@ -86,14 +89,14 @@ Acceptance criteria:
 
 ### Phase 2 — Multiple notes
 
-- [ ] Create, rename, select, and delete notes
-- [ ] Show notes in a collapsible sidebar
-- [ ] Search note titles and bodies as the user types
-- [ ] Sort alphabetically, by creation date, or by last-modified date
-- [ ] Offer compact and detailed note-list views
-- [ ] Show an empty state when no note matches a search
-- [ ] Keep the active note selected after reload
-- [ ] Migrate the existing single-note storage value without data loss
+- [x] Create, rename, select, and delete notes
+- [x] Show notes in a collapsible sidebar
+- [x] Search note titles and bodies as the user types
+- [x] Sort alphabetically, by creation date, or by last-modified date
+- [x] Offer compact and detailed note-list views
+- [x] Show an empty state when no note matches a search
+- [x] Keep the active note selected after reload
+- [x] Migrate the existing single-note storage value without data loss
 
 Acceptance criteria:
 
@@ -197,7 +200,7 @@ version number makes future migrations and backup validation possible.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "activeNoteId": "note_123",
   "notes": [
     {
@@ -210,10 +213,7 @@ version number makes future migrations and backup validation possible.
   ],
   "preferences": {
     "sortBy": "updatedAt",
-    "listView": "detailed",
-    "wordWrap": true,
-    "showStatusBar": true,
-    "colorMode": "system"
+    "listView": "detailed"
   }
 }
 ```
@@ -240,16 +240,18 @@ framework or build step:
 │   ├── app.js             # initialization and event wiring
 │   ├── autosave.js        # debounce, flush, and save-state transitions
 │   ├── editor.js          # selection and text-editing commands
+│   ├── notes.js           # note operations, filtering, and sorting
 │   ├── storage.js         # versioned persistence and legacy migration
 │   └── styles.css
 └── tests/
     ├── autosave.test.js
     ├── editor.test.js
+    ├── notes.test.js
     └── storage.test.js
 ```
 
-Future phases can add modules for multi-note state, shortcuts, and file handling
-as those features are implemented.
+Future phases can add modules for shortcuts and file handling as those features
+are implemented.
 
 ## Keyboard shortcuts to support
 

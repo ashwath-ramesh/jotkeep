@@ -42,6 +42,14 @@ class FakeTextarea extends EventTarget {
   }
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 test("countText reports zero for empty and whitespace-only text", () => {
   assert.deepEqual(countText(""), { words: 0, characters: 0 });
   assert.deepEqual(countText("  \n\t"), { words: 0, characters: 4 });
@@ -104,6 +112,54 @@ test("successful clipboard copy restores focus and the saved selection", async (
 
   await commands.execute("copy");
   assert.deepEqual(writes, ["copy", "copy"]);
+});
+
+test("invalidating a pending cut prevents it from changing a new note", async () => {
+  const clipboardWrite = deferred();
+  const textarea = new FakeTextarea("same", 0, 4);
+  const commands = createEditorCommands(textarea, {
+    navigatorObject: {
+      clipboard: {
+        writeText: () => clipboardWrite.promise,
+      },
+    },
+  });
+
+  const pendingCut = commands.execute("cut");
+  commands.invalidatePendingCommands();
+  textarea.value = "same";
+  textarea.setSelectionRange(2, 2);
+  clipboardWrite.resolve();
+  await pendingCut;
+
+  assert.equal(textarea.value, "same");
+  assert.equal(textarea.selectionStart, 2);
+  assert.equal(textarea.selectionEnd, 2);
+});
+
+test("invalidating a pending paste prevents it from changing a new note", async () => {
+  const clipboardRead = deferred();
+  const textarea = new FakeTextarea("", 0);
+  const commands = createEditorCommands(textarea, {
+    navigatorObject: {
+      clipboard: {
+        readText: () => clipboardRead.promise,
+      },
+    },
+  });
+  let inputEvents = 0;
+  textarea.addEventListener("input", () => {
+    inputEvents += 1;
+  });
+
+  const pendingPaste = commands.execute("paste");
+  commands.invalidatePendingCommands();
+  textarea.value = "";
+  clipboardRead.resolve("pasted text");
+  await pendingPaste;
+
+  assert.equal(textarea.value, "");
+  assert.equal(inputEvents, 0);
 });
 
 test("cancelling clear preserves the note and restores editor focus", () => {
