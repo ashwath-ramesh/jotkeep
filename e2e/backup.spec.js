@@ -38,6 +38,36 @@ async function releaseFileRead(page) {
   await page.evaluate(() => window.releaseDelayedFileRead());
 }
 
+async function readIndexedDbDocument(page) {
+  return page.evaluate(async () => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("plainjot", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction(["notes", "metadata"], "readonly");
+    const notesRequest = transaction.objectStore("notes").getAll();
+    const metadataRequest = transaction.objectStore("metadata").get("notebook");
+    const [notes, metadata] = await Promise.all(
+      [notesRequest, metadataRequest].map(
+        (request) =>
+          new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          }),
+      ),
+    );
+    database.close();
+    const notesById = new Map(notes.map((note) => [note.id, note]));
+    return {
+      version: 2,
+      activeNoteId: metadata.activeNoteId,
+      notes: metadata.noteIds.map((id) => notesById.get(id)),
+      preferences: metadata.preferences,
+    };
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   const errors = [];
   browserErrors.set(page, errors);
@@ -156,9 +186,7 @@ test("invalid restore changes nothing and merge preserves local context", async 
   await expect(page.locator("#note-title")).toHaveValue("Local");
   await expect(page.locator("#notes-list > li")).toHaveCount(1);
 
-  const currentDocument = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("minimal-notepad.document.v2")),
-  );
+  const currentDocument = await readIndexedDbDocument(page);
   const importedDocument = structuredClone(currentDocument);
   importedDocument.notes[0].title = "Imported collision";
   importedDocument.notes[0].content = "Imported body";
@@ -208,9 +236,7 @@ test("selecting another backup disables restore until validation finishes", asyn
 }) => {
   await page.locator("#note-title").fill("Local");
   await expect(page.locator("#save-state")).toHaveText("Saved");
-  const document = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("minimal-notepad.document.v2")),
-  );
+  const document = await readIndexedDbDocument(page);
   const backup = {
     format: "plainjot-backup",
     version: 1,

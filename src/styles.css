@@ -475,6 +475,11 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+#storage-status {
+  order: 4;
+  width: 100%;
+}
+
 .overflow,
 .toolbar-popup {
   position: relative;

@@ -36,13 +36,13 @@ import {
   updatePreferences,
 } from "./notes.js";
 import {
-  clearPlainJotData,
   createNotesDocument,
-  loadLastBackupMetadata,
-  loadNotesDocument,
-  saveLastBackupMetadata,
-  saveNotesDocument,
 } from "./storage.js";
+import {
+  PERSISTENCE_STATES,
+  STORAGE_FAILURES,
+  createBrowserStorageService,
+} from "./indexeddb-storage.js";
 
 const AUTOSAVE_DELAY_MS = 500;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
@@ -55,6 +55,7 @@ const commandFeedback = document.querySelector("#command-feedback");
 const wordCount = document.querySelector("#word-count");
 const characterCount = document.querySelector("#character-count");
 const backupStatus = document.querySelector("#backup-status");
+const storageStatus = document.querySelector("#storage-status");
 const moreButton = document.querySelector("#more-commands");
 const commandMenu = document.querySelector("#command-menu");
 const overflow = document.querySelector(".overflow");
@@ -113,18 +114,15 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
-let browserStorage;
-
-try {
-  browserStorage = window.localStorage;
-} catch {
-  browserStorage = null;
-}
-
-const loadedNotes = loadNotesDocument(browserStorage);
+workspace.inert = true;
+workspace.setAttribute("aria-busy", "true");
+const storageService = createBrowserStorageService();
+const loadedNotes = await storageService.initialize();
 let notesDocument = loadedNotes.document;
-let canSafelySave = loadedNotes.canSave;
-let lastBackupMetadata = loadLastBackupMetadata(browserStorage);
+let canSafelySave = loadedNotes.canSafelySave;
+let lastBackupMetadata = loadedNotes.lastBackupMetadata;
+let storageIssue = loadedNotes.error;
+let persistenceState = loadedNotes.persistenceState;
 let editorCommands;
 let sidebarOpen = !narrowLayout.matches;
 let findReplaceMode = false;
@@ -136,6 +134,17 @@ let backupReadGeneration = 0;
 let textImportGeneration = 0;
 let restoreReturnFocus = null;
 let clearDataReturnFocus = null;
+let notebookTransitionPending = false;
+
+function setNotebookTransitionPending(pending) {
+  notebookTransitionPending = pending;
+  titleInput.disabled = pending;
+  note.disabled = pending;
+  newNoteButton.disabled = pending;
+  sortSelect.disabled = pending;
+  listViewSelect.disabled = pending;
+  notesList.inert = pending;
+}
 
 function activeNote() {
   return notesDocument.notes.find(
@@ -171,6 +180,46 @@ function renderBackupStatus() {
   const created = new Date(lastBackupMetadata.createdAt);
   backupStatus.textContent = `Last JSON backup created ${timestampFormatter.format(created)}`;
   backupStatus.title = lastBackupMetadata.createdAt;
+}
+
+function renderStorageStatus() {
+  let message;
+
+  if (storageIssue?.kind === STORAGE_FAILURES.QUOTA) {
+    message = "Browser storage is full; unsaved edits remain available in this tab.";
+  } else if (storageIssue?.kind === STORAGE_FAILURES.MIGRATION) {
+    message = "Storage migration failed; the original local data was kept.";
+  } else if (storageIssue?.kind === STORAGE_FAILURES.CONFLICT) {
+    message = "Notes changed in another tab; reload before saving more changes.";
+  } else if (storageIssue) {
+    message = "Browser storage is unavailable; editing continues in this tab.";
+  } else {
+    switch (persistenceState) {
+      case PERSISTENCE_STATES.GRANTED:
+        message = "Persistent browser storage enabled; clearing site data still removes notes.";
+        break;
+      case PERSISTENCE_STATES.DENIED:
+        message = "Persistent storage was not granted; notes still save in browser storage.";
+        break;
+      case PERSISTENCE_STATES.UNAVAILABLE:
+        message = "Persistent-storage status is unavailable; notes still save in this browser.";
+        break;
+      case PERSISTENCE_STATES.UNSUPPORTED:
+        message = "Browser storage can be removed automatically or by clearing site data.";
+        break;
+      default:
+        message = "Browser storage is not persistent; clearing site data removes notes.";
+        break;
+    }
+  }
+
+  storageStatus.textContent = message;
+  storageStatus.title = message;
+}
+
+function reportStorageIssue(error) {
+  storageIssue = error;
+  renderStorageStatus();
 }
 
 function visibleNotes() {
@@ -270,27 +319,49 @@ function showActiveNote({ focus = "none" } = {}) {
 showActiveNote();
 renderNotes();
 renderBackupStatus();
+renderStorageStatus();
+workspace.inert = false;
+workspace.removeAttribute("aria-busy");
 
 const autosave = createAutosave({
   delay: AUTOSAVE_DELAY_MS,
-  save: () => {
+  save: async () => {
     if (!canSafelySave) {
-      throw new Error("Stored notes cannot be safely replaced.");
+      throw storageIssue ?? new Error("Stored notes cannot be safely replaced.");
     }
-    saveNotesDocument(browserStorage, notesDocument);
+    await storageService.saveNotebook(structuredClone(notesDocument));
   },
   onStateChange: (state) => {
     saveState.textContent = state;
+    if (state === SAVE_STATES.SAVED) {
+      storageIssue = null;
+      renderStorageStatus();
+    }
+  },
+  onError: reportStorageIssue,
+  errorState: (error) => {
+    if (error?.kind === STORAGE_FAILURES.QUOTA) {
+      return SAVE_STATES.QUOTA;
+    }
+    if (error?.kind === STORAGE_FAILURES.MIGRATION) {
+      return SAVE_STATES.MIGRATION;
+    }
+    if (error?.kind === STORAGE_FAILURES.CONFLICT) {
+      return SAVE_STATES.CONFLICT;
+    }
+    return SAVE_STATES.UNAVAILABLE;
   },
 });
 
-autosave.setState(
-  loadedNotes.storageAvailable ? SAVE_STATES.SAVED : SAVE_STATES.UNAVAILABLE,
-);
+autosave.setState(storageIssue?.kind === STORAGE_FAILURES.MIGRATION
+  ? SAVE_STATES.MIGRATION
+  : loadedNotes.storageAvailable
+    ? SAVE_STATES.SAVED
+    : SAVE_STATES.UNAVAILABLE);
 
-function persistImmediately() {
+async function persistImmediately() {
   autosave.markDirty();
-  return autosave.flush();
+  return await autosave.flush();
 }
 
 function updateActiveNote(changes) {
@@ -503,13 +574,13 @@ async function importTextFile(file, generation) {
     return;
   }
 
-  autosave.flush();
+  await autosave.flush();
   notesDocument = addNote(notesDocument, {
     title: titleFromTextFilename(file.name),
     content,
   });
   searchInput.value = "";
-  const saved = persistImmediately();
+  const saved = await persistImmediately();
   showActiveNote({ focus: "body" });
   renderNotes();
   setCommandFeedback(
@@ -541,16 +612,16 @@ textFileInput.addEventListener("change", async () => {
   }
 });
 
-function downloadActiveNote() {
-  autosave.flush();
+async function downloadActiveNote() {
+  await autosave.flush();
   const savedNote = activeNote();
   const filename = sanitizeFilename(savedNote.title);
   downloadFile(savedNote.content, "text/plain;charset=utf-8", filename);
   setCommandFeedback(`Created text download “${filename}”.`);
 }
 
-function exportJsonBackup() {
-  autosave.flush();
+async function exportJsonBackup() {
+  await autosave.flush();
 
   try {
     const backup = createBackup(notesDocument);
@@ -562,9 +633,10 @@ function exportJsonBackup() {
     lastBackupMetadata = { version: 1, createdAt: backup.createdAt };
     let metadataSaved = true;
     try {
-      saveLastBackupMetadata(browserStorage, backup.createdAt);
-    } catch {
+      await storageService.saveLastBackup(backup.createdAt);
+    } catch (error) {
       metadataSaved = false;
+      reportStorageIssue(error);
     }
 
     renderBackupStatus();
@@ -575,6 +647,34 @@ function exportJsonBackup() {
     );
   } catch (error) {
     setCommandFeedback(`Could not create backup: ${error.message}`);
+  }
+}
+
+async function requestBrowserPersistence() {
+  persistenceState = await storageService.requestPersistence();
+  renderStorageStatus();
+
+  switch (persistenceState) {
+    case PERSISTENCE_STATES.GRANTED:
+      setCommandFeedback(
+        "Persistent browser storage is enabled. Clearing site data can still remove your notes.",
+      );
+      break;
+    case PERSISTENCE_STATES.DENIED:
+      setCommandFeedback(
+        "The browser did not grant persistent storage. Editing and browser saves still work.",
+      );
+      break;
+    case PERSISTENCE_STATES.UNSUPPORTED:
+      setCommandFeedback(
+        "This browser does not offer a persistent-storage request. Keep JSON backups somewhere safe.",
+      );
+      break;
+    default:
+      setCommandFeedback(
+        "PlainJot could not request persistent storage. Editing and browser saves still work.",
+      );
+      break;
   }
 }
 
@@ -662,7 +762,7 @@ backupFileInput.addEventListener("change", async () => {
   setRestoreLoading();
 
   try {
-    autosave.flush();
+    await autosave.flush();
     const backup = await readBackupFile(file);
     if (generation === backupReadGeneration) {
       showRestoreBackup(backup);
@@ -700,7 +800,7 @@ restoreDialog.addEventListener("close", () => {
   restoreReturnFocus = null;
 });
 
-restoreConfirm.addEventListener("click", () => {
+restoreConfirm.addEventListener("click", async () => {
   if (pendingBackup === null) {
     return;
   }
@@ -719,7 +819,7 @@ restoreConfirm.addEventListener("click", () => {
       mode === "merge"
         ? mergeBackupDocument(notesDocument, pendingBackup.document)
         : structuredClone(pendingBackup.document);
-  } catch {
+  } catch (error) {
     restoreError.textContent =
       "PlainJot could not prepare this restore without creating duplicate note IDs. No notes were changed.";
     restoreError.hidden = false;
@@ -727,8 +827,13 @@ restoreConfirm.addEventListener("click", () => {
   }
 
   try {
-    saveNotesDocument(browserStorage, candidate);
-  } catch {
+    if (mode === "replace") {
+      await storageService.replaceNotebook(candidate);
+    } else {
+      await storageService.saveNotebook(candidate);
+    }
+  } catch (error) {
+    reportStorageIssue(error);
     restoreError.textContent =
       "PlainJot could not save the restored notebook. Check browser storage access or available space; no notes were changed.";
     restoreError.hidden = false;
@@ -738,6 +843,7 @@ restoreConfirm.addEventListener("click", () => {
   textImportGeneration += 1;
   notesDocument = candidate;
   canSafelySave = true;
+  storageIssue = null;
   autosave.reset(SAVE_STATES.SAVED);
   searchInput.value = "";
   renderNotes();
@@ -774,10 +880,12 @@ clearDataDialog.addEventListener("close", () => {
   clearDataReturnFocus = null;
 });
 
-clearDataConfirm.addEventListener("click", () => {
+clearDataConfirm.addEventListener("click", async () => {
+  await autosave.flush();
   try {
-    clearPlainJotData(browserStorage);
-  } catch {
+    await storageService.clear();
+  } catch (error) {
+    reportStorageIssue(error);
     clearDataError.textContent =
       "PlainJot could not clear browser storage. Your current notes remain open.";
     clearDataError.hidden = false;
@@ -787,18 +895,20 @@ clearDataConfirm.addEventListener("click", () => {
   textImportGeneration += 1;
   autosave.reset(SAVE_STATES.CLEARED);
   canSafelySave = true;
+  storageIssue = null;
   notesDocument = createNotesDocument();
   lastBackupMetadata = null;
   searchInput.value = "";
   renderNotes();
   renderBackupStatus();
+  renderStorageStatus();
   showActiveNote({ focus: "body" });
   closeClearDataDialog();
   setCommandFeedback("All PlainJot data was cleared from this browser.");
 });
 
 for (const button of document.querySelectorAll("[data-file-action]")) {
-  button.addEventListener("click", () => {
+  button.addEventListener("click", async () => {
     closeAllMenus();
 
     switch (button.dataset.fileAction) {
@@ -806,14 +916,17 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
         chooseFile(textFileInput);
         break;
       case "download-text":
-        downloadActiveNote();
+        await downloadActiveNote();
         break;
       case "export-backup":
-        exportJsonBackup();
+        await exportJsonBackup();
         break;
       case "restore-backup":
         restoreReturnFocus = button.closest("#file-menu") ? fileButton : moreButton;
         chooseFile(backupFileInput);
+        break;
+      case "persist-storage":
+        await requestBrowserPersistence();
         break;
       case "clear-data":
         openClearDataDialog(
@@ -1232,11 +1345,19 @@ narrowLayout.addEventListener("change", (event) => {
 
 compactToolbar.addEventListener("change", closeAllMenus);
 
-function selectSavedNote(noteId) {
+async function selectSavedNote(noteId) {
   if (noteId !== notesDocument.activeNoteId) {
-    autosave.flush();
-    notesDocument = setActiveNote(notesDocument, noteId);
-    persistImmediately();
+    if (notebookTransitionPending) {
+      return;
+    }
+    setNotebookTransitionPending(true);
+    try {
+      await autosave.flush();
+      notesDocument = setActiveNote(notesDocument, noteId);
+      await persistImmediately();
+    } finally {
+      setNotebookTransitionPending(false);
+    }
     showActiveNote({ focus: "body" });
     renderNotes();
   } else {
@@ -1248,11 +1369,19 @@ function selectSavedNote(noteId) {
   }
 }
 
-function createSavedNote() {
-  autosave.flush();
-  notesDocument = addNote(notesDocument);
-  searchInput.value = "";
-  persistImmediately();
+async function createSavedNote() {
+  if (notebookTransitionPending) {
+    return;
+  }
+  setNotebookTransitionPending(true);
+  try {
+    await autosave.flush();
+    notesDocument = addNote(notesDocument);
+    searchInput.value = "";
+    await persistImmediately();
+  } finally {
+    setNotebookTransitionPending(false);
+  }
   showActiveNote({ focus: "title" });
   renderNotes();
 
@@ -1261,7 +1390,7 @@ function createSavedNote() {
   }
 }
 
-function deleteSavedNote(noteId, trigger) {
+async function deleteSavedNote(noteId, trigger) {
   const savedNote = notesDocument.notes.find((item) => item.id === noteId);
 
   if (!window.confirm(`Delete “${displayNoteTitle(savedNote)}”?`)) {
@@ -1269,34 +1398,45 @@ function deleteSavedNote(noteId, trigger) {
     return;
   }
 
-  autosave.flush();
-  const deletingActiveNote = noteId === notesDocument.activeNoteId;
-  const deletingOnlyNote = notesDocument.notes.length === 1;
-  let nextActiveNoteId;
-
-  if (deletingOnlyNote) {
-    searchInput.value = "";
+  if (notebookTransitionPending) {
+    return;
   }
+  setNotebookTransitionPending(true);
 
-  if (deletingActiveNote && !deletingOnlyNote) {
-    nextActiveNoteId = chooseNeighborNoteId(
-      noteId,
-      visibleNotes().map((item) => item.id),
-    );
+  let deletingActiveNote;
+  let deletingOnlyNote;
+  let nextActiveNoteId;
+  try {
+    await autosave.flush();
+    deletingActiveNote = noteId === notesDocument.activeNoteId;
+    deletingOnlyNote = notesDocument.notes.length === 1;
 
-    if (nextActiveNoteId === null) {
+    if (deletingOnlyNote) {
       searchInput.value = "";
+    }
+
+    if (deletingActiveNote && !deletingOnlyNote) {
       nextActiveNoteId = chooseNeighborNoteId(
         noteId,
-        sortNotes(notesDocument.notes, notesDocument.preferences.sortBy).map(
-          (item) => item.id,
-        ),
+        visibleNotes().map((item) => item.id),
       );
-    }
-  }
 
-  notesDocument = deleteNote(notesDocument, noteId, { nextActiveNoteId });
-  persistImmediately();
+      if (nextActiveNoteId === null) {
+        searchInput.value = "";
+        nextActiveNoteId = chooseNeighborNoteId(
+          noteId,
+          sortNotes(notesDocument.notes, notesDocument.preferences.sortBy).map(
+            (item) => item.id,
+          ),
+        );
+      }
+    }
+
+    notesDocument = deleteNote(notesDocument, noteId, { nextActiveNoteId });
+    await persistImmediately();
+  } finally {
+    setNotebookTransitionPending(false);
+  }
   renderNotes();
 
   if (deletingActiveNote) {
@@ -1311,40 +1451,44 @@ function deleteSavedNote(noteId, trigger) {
   }
 }
 
-newNoteButton.addEventListener("click", createSavedNote);
+newNoteButton.addEventListener("click", () => {
+  void createSavedNote();
+});
 
 notesList.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-delete-note-id]");
   if (deleteButton) {
-    deleteSavedNote(deleteButton.dataset.deleteNoteId, deleteButton);
+    void deleteSavedNote(deleteButton.dataset.deleteNoteId, deleteButton);
     return;
   }
 
   const selectButton = event.target.closest("[data-note-id]");
   if (selectButton) {
-    selectSavedNote(selectButton.dataset.noteId);
+    void selectSavedNote(selectButton.dataset.noteId);
   }
 });
 
 searchInput.addEventListener("input", renderNotes);
 
-sortSelect.addEventListener("change", () => {
+sortSelect.addEventListener("change", async () => {
   notesDocument = updatePreferences(notesDocument, { sortBy: sortSelect.value });
   renderNotes();
-  persistImmediately();
+  await persistImmediately();
 });
 
-listViewSelect.addEventListener("change", () => {
+listViewSelect.addEventListener("change", async () => {
   notesDocument = updatePreferences(notesDocument, {
     listView: listViewSelect.value,
   });
   renderNotes();
-  persistImmediately();
+  await persistImmediately();
 });
 
-window.addEventListener("pagehide", () => autosave.flush());
+window.addEventListener("pagehide", () => {
+  void autosave.flush();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    autosave.flush();
+    void autosave.flush();
   }
 });

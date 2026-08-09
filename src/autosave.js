@@ -2,18 +2,25 @@ export const SAVE_STATES = Object.freeze({
   SAVING: "Saving…",
   SAVED: "Saved",
   CLEARED: "Local data cleared",
+  QUOTA: "Storage full",
+  MIGRATION: "Migration failed",
+  CONFLICT: "Changed in another tab",
   UNAVAILABLE: "Storage unavailable",
 });
 
 export function createAutosave({
   save,
   onStateChange,
+  onError = () => {},
+  errorState = () => SAVE_STATES.UNAVAILABLE,
   delay = 500,
   schedule = globalThis.setTimeout,
   cancel = globalThis.clearTimeout,
 }) {
   let timer;
-  let dirty = false;
+  let revision = 0;
+  let savedRevision = 0;
+  let flushPromise = null;
   let currentState;
 
   function setState(nextState) {
@@ -34,34 +41,52 @@ export function createAutosave({
     timer = undefined;
   }
 
-  function flush() {
+  async function flush() {
     cancelScheduledSave();
 
-    if (!dirty) {
+    if (revision === savedRevision) {
       return true;
     }
 
-    try {
-      save();
-      dirty = false;
+    if (flushPromise !== null) {
+      return flushPromise;
+    }
+
+    flushPromise = (async () => {
+      while (revision !== savedRevision) {
+        const savingRevision = revision;
+        try {
+          await save();
+          savedRevision = savingRevision;
+        } catch (error) {
+          onError(error);
+          setState(errorState(error));
+          return false;
+        }
+      }
+
       setState(SAVE_STATES.SAVED);
       return true;
-    } catch {
-      setState(SAVE_STATES.UNAVAILABLE);
-      return false;
+    })();
+
+    try {
+      return await flushPromise;
+    } finally {
+      flushPromise = null;
     }
   }
 
   function markDirty() {
-    dirty = true;
+    revision += 1;
     setState(SAVE_STATES.SAVING);
     cancelScheduledSave();
-    timer = schedule(flush, delay);
+    timer = schedule(() => flush(), delay);
   }
 
   function reset(state = SAVE_STATES.SAVED) {
     cancelScheduledSave();
-    dirty = false;
+    revision = 0;
+    savedRevision = 0;
     setState(state);
   }
 
@@ -70,6 +95,6 @@ export function createAutosave({
     markDirty,
     reset,
     setState,
-    isDirty: () => dirty,
+    isDirty: () => revision !== savedRevision,
   };
 }

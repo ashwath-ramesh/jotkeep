@@ -13,13 +13,14 @@ The core promise is:
 
 ## Project status
 
-Phase 4 is complete. The repository contains a modular, runtime-dependency-free
+Phase 5 is complete. The repository contains a modular, runtime-dependency-free
 multiple-note application with:
 
 - a titled, spellchecked plain-text editor with a responsive notes sidebar;
 - note creation, selection, renaming, confirmed deletion, search, and sorting;
 - compact and detailed note-list views with a persistent active note;
-- debounced, versioned `localStorage` persistence and lossless migration from
+- debounced, transactional IndexedDB persistence with one record per note;
+- verified, lossless migration from the version 2 `localStorage` notebook and
   both earlier single-note formats;
 - visible save state plus live word and character counts;
 - familiar editing commands and confirmed clearing;
@@ -79,6 +80,15 @@ does not delete files that were already downloaded.
 
 Individual `.txt` files are a plain-text escape route. Opening one creates a new
 note, while downloading a note exports its body without formatting markup.
+
+## Browser storage durability
+
+PlainJot stores notes as individual records in IndexedDB. Use **File → Keep data
+on this device** to ask the browser for persistent storage. A grant makes
+automatic eviction less likely; it does not create an external backup and does
+not prevent the user from deleting the data through browser site-data settings.
+The storage status at the bottom of the editor reports whether persistence was
+granted and whether storage, quota, or migration problems need attention.
 
 ## Product principles
 
@@ -182,14 +192,14 @@ Acceptance criteria:
 
 ### Phase 5 — Storage architecture and browser durability
 
-- [ ] Put persistence behind a small asynchronous storage adapter
-- [ ] Remove direct `localStorage` access from application and UI modules
-- [ ] Add an IndexedDB adapter that stores notes as individual records
-- [ ] Migrate the version 2 `localStorage` document without data loss
-- [ ] Keep the old value until the migrated IndexedDB data is verified
-- [ ] Use transactions for multi-record changes
-- [ ] Request persistent browser storage after an appropriate user action
-- [ ] Report quota, denied-persistence, unavailable-storage, and migration
+- [x] Put persistence behind a small asynchronous storage adapter
+- [x] Remove direct `localStorage` access from application and UI modules
+- [x] Add an IndexedDB adapter that stores notes as individual records
+- [x] Migrate the version 2 `localStorage` document without data loss
+- [x] Keep the old value until the migrated IndexedDB data is verified
+- [x] Use transactions for multi-record changes
+- [x] Request persistent browser storage after an appropriate user action
+- [x] Report quota, denied-persistence, unavailable-storage, and migration
   failures without blocking editing
 
 Acceptance criteria:
@@ -374,9 +384,10 @@ scrolling.
 
 ## Current data model
 
-The current version 2 `localStorage` document is a migration source and the
-canonical application-level shape until Phase 5. Its version number makes
-existing migrations and Phase 4 backup validation possible.
+The version 2 document remains the canonical application and JSON-backup shape.
+IndexedDB stores each note separately and keeps active-note selection,
+preferences, note ordering, and backup status in metadata records. The former
+version 2 `localStorage` document is read only as a migration source.
 
 ```json
 {
@@ -428,8 +439,9 @@ behavior uses Node's test runner; recovery workflows use Playwright:
 │   ├── editor.js          # selection and text-editing commands
 │   ├── find-replace.js    # literal matching and replacement helpers
 │   ├── insert.js          # insertion palettes and date-time formatting
+│   ├── indexeddb-storage.js # async adapter, transactions, and migration
 │   ├── notes.js           # note operations, filtering, and sorting
-│   ├── storage.js         # versioned persistence and legacy migration
+│   ├── storage.js         # document validation and legacy format helpers
 │   └── styles.css
 ├── tests/
 │   ├── autosave.test.js
@@ -440,12 +452,13 @@ behavior uses Node's test runner; recovery workflows use Playwright:
 │   ├── notes.test.js
 │   └── storage.test.js
 └── e2e/
-    └── backup.spec.js
+    ├── backup.spec.js
+    └── storage.spec.js
 ```
 
-Future phases should add focused modules for storage adapters, IndexedDB
-migrations, Safety File access, snapshots, encryption, and device transfer
-rather than expanding `app.js` into a persistence layer.
+Future phases should continue using focused modules for Safety File access,
+snapshots, encryption, and device transfer rather than expanding `app.js` into
+a persistence layer.
 
 ## Keyboard shortcuts to support
 

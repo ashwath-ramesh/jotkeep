@@ -17,10 +17,10 @@ function createScheduler() {
     cancel(id) {
       tasks.delete(id);
     },
-    runAll() {
+    async runAll() {
       const pending = [...tasks.values()];
       tasks.clear();
-      pending.forEach((callback) => callback());
+      await Promise.all(pending.map((callback) => callback()));
     },
     size() {
       return tasks.size;
@@ -28,7 +28,7 @@ function createScheduler() {
   };
 }
 
-test("autosave coalesces edits and saves after the debounce", () => {
+test("autosave coalesces edits and saves after the debounce", async () => {
   const scheduler = createScheduler();
   const states = [];
   let saves = 0;
@@ -48,14 +48,14 @@ test("autosave coalesces edits and saves after the debounce", () => {
   assert.equal(saves, 0);
   assert.deepEqual(states, [SAVE_STATES.SAVING]);
 
-  scheduler.runAll();
+  await scheduler.runAll();
 
   assert.equal(saves, 1);
   assert.equal(autosave.isDirty(), false);
   assert.deepEqual(states, [SAVE_STATES.SAVING, SAVE_STATES.SAVED]);
 });
 
-test("autosave stays dirty after failure and retries after another edit", () => {
+test("autosave stays dirty after failure and retries after another edit", async () => {
   const scheduler = createScheduler();
   const states = [];
   let shouldFail = true;
@@ -71,20 +71,20 @@ test("autosave stays dirty after failure and retries after another edit", () => 
   });
 
   autosave.markDirty();
-  scheduler.runAll();
+  await scheduler.runAll();
 
   assert.equal(autosave.isDirty(), true);
   assert.equal(states.at(-1), SAVE_STATES.UNAVAILABLE);
 
   shouldFail = false;
   autosave.markDirty();
-  scheduler.runAll();
+  await scheduler.runAll();
 
   assert.equal(autosave.isDirty(), false);
   assert.equal(states.at(-1), SAVE_STATES.SAVED);
 });
 
-test("flush cancels a pending timer and saves synchronously", () => {
+test("flush cancels a pending timer and awaits the save", async () => {
   const scheduler = createScheduler();
   let saves = 0;
   const autosave = createAutosave({
@@ -98,15 +98,15 @@ test("flush cancels a pending timer and saves synchronously", () => {
 
   autosave.markDirty();
 
-  assert.equal(autosave.flush(), true);
+  assert.equal(await autosave.flush(), true);
   assert.equal(scheduler.size(), 0);
   assert.equal(saves, 1);
 
-  scheduler.runAll();
+  await scheduler.runAll();
   assert.equal(saves, 1);
 });
 
-test("reset cancels pending work, clears dirty state, and sets the requested state", () => {
+test("reset cancels pending work, clears dirty state, and sets the requested state", async () => {
   const scheduler = createScheduler();
   const states = [];
   let saves = 0;
@@ -121,9 +121,58 @@ test("reset cancels pending work, clears dirty state, and sets the requested sta
 
   autosave.markDirty();
   autosave.reset(SAVE_STATES.CLEARED);
-  scheduler.runAll();
+  await scheduler.runAll();
 
   assert.equal(saves, 0);
   assert.equal(autosave.isDirty(), false);
   assert.deepEqual(states, [SAVE_STATES.SAVING, SAVE_STATES.CLEARED]);
+});
+
+test("an edit during an in-flight save is included in a serialized follow-up", async () => {
+  let releaseFirst;
+  const firstSave = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const states = [];
+  let saves = 0;
+  const autosave = createAutosave({
+    save: async () => {
+      saves += 1;
+      if (saves === 1) {
+        await firstSave;
+      }
+    },
+    onStateChange: (state) => states.push(state),
+  });
+
+  autosave.markDirty();
+  const flushing = autosave.flush();
+  autosave.markDirty();
+  releaseFirst();
+
+  assert.equal(await flushing, true);
+  assert.equal(saves, 2);
+  assert.equal(autosave.isDirty(), false);
+  assert.equal(states.at(-1), SAVE_STATES.SAVED);
+});
+
+test("async failures retain dirty state and use the classified error state", async () => {
+  const errors = [];
+  const states = [];
+  const failure = { kind: "quota" };
+  const autosave = createAutosave({
+    save: async () => {
+      throw failure;
+    },
+    onStateChange: (state) => states.push(state),
+    onError: (error) => errors.push(error),
+    errorState: () => SAVE_STATES.QUOTA,
+  });
+
+  autosave.markDirty();
+
+  assert.equal(await autosave.flush(), false);
+  assert.equal(autosave.isDirty(), true);
+  assert.deepEqual(errors, [failure]);
+  assert.equal(states.at(-1), SAVE_STATES.QUOTA);
 });
