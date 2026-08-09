@@ -3,8 +3,18 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background: #f7f6f2;
-  color: #24231f;
+  background: #ffffff;
+  color: #171717;
+  --surface: #ffffff;
+  --ink: #171717;
+  --muted-ink: #737373;
+  --quiet-ink: #767676;
+  --line: #e5e5e5;
+  --subtle-surface: #fafafa;
+  --hover: #f5f5f5;
+  --pressed: #ebebeb;
+  --danger: #991b1b;
+  --focus: #171717;
 }
 
 * {
@@ -20,7 +30,7 @@ body {
 body {
   min-height: 100vh;
   min-height: 100dvh;
-  background: #f7f6f2;
+  background: var(--surface);
 }
 
 button,
@@ -30,29 +40,36 @@ textarea {
 }
 
 button {
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d6d2c8;
-  border-radius: 0.45rem;
-  background: #fffefa;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: transparent;
   color: inherit;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 button:hover {
-  border-color: #aaa398;
-  background: #f6f2e9;
+  background: var(--hover);
 }
 
 button:active {
-  background: #eee8dc;
+  background: var(--pressed);
 }
 
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid #2563eb;
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+::selection {
+  background: #d4d4d4;
+  color: var(--ink);
 }
 
 .visually-hidden {
@@ -70,50 +87,64 @@ textarea:focus-visible {
 .app-shell {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(100%, 76rem);
+  width: min(100%, 80rem);
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
-  background: #fffefa;
-  box-shadow: 0 0 2rem rgb(74 68 56 / 8%);
+  background: var(--surface);
 }
 
 .title-bar {
-  padding: clamp(1rem, 3vw, 2rem) clamp(1rem, 4vw, 3rem) 0.75rem;
+  display: flex;
+  height: 3.5rem;
+  align-items: center;
+  padding: 0 clamp(1.25rem, 3vw, 2.5rem);
+  border-bottom: 1px solid var(--line);
 }
 
 .title-input {
   width: 100%;
-  padding: 0.25rem 0;
+  height: 100%;
+  padding: 0;
   border: 0;
   border-bottom: 1px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: inherit;
-  font-size: clamp(1.35rem, 1.1rem + 1vw, 2rem);
-  font-weight: 650;
+  color: var(--ink);
+  font-size: clamp(1.25rem, 1.1rem + 0.4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  transition: border-color 120ms ease;
 }
 
 .title-input::placeholder,
 .notepad::placeholder {
-  color: #8d897f;
+  color: var(--quiet-ink);
+  opacity: 1;
 }
 
 .title-input:hover {
-  border-bottom-color: #d6d2c8;
+  border-bottom-color: var(--line);
+}
+
+.title-input:focus-visible {
+  border-bottom-color: var(--ink);
+  outline: 0;
 }
 
 .toolbar {
   position: relative;
   z-index: 2;
-  padding: 0 1rem 0.75rem;
-  border-bottom: 1px solid #e7e3da;
+  padding: 0 clamp(0.75rem, 2vw, 1.5rem);
+  border-bottom: 1px solid var(--line);
+  background: var(--subtle-surface);
 }
 
 .desktop-commands,
 .mobile-commands {
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.125rem;
 }
 
 .desktop-commands {
@@ -124,19 +155,39 @@ textarea:focus-visible {
   display: none;
 }
 
+.toolbar button {
+  min-height: 2.25rem;
+  padding-block: 0.25rem;
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.toolbar button:hover,
+.toolbar button:focus-visible {
+  color: var(--ink);
+}
+
+.toolbar .danger-button:hover,
+.toolbar .danger-button:focus-visible {
+  color: var(--danger);
+}
+
 .toolbar-separator {
   width: 1px;
-  height: 1.75rem;
-  margin: 0 0.25rem;
-  background: #ded9cf;
+  height: 1rem;
+  margin: 0 0.5rem;
+  background: var(--line);
 }
 
 .toolbar-spacer {
   flex: 1;
 }
 
-.danger-button {
-  color: #9f1239;
+.toolbar .danger-button,
+#command-feedback {
+  color: var(--danger);
 }
 
 .editor-panel {
@@ -148,41 +199,41 @@ textarea:focus-visible {
   display: block;
   width: 100%;
   min-height: 20rem;
-  padding: clamp(1.25rem, 4vw, 3rem);
+  padding: clamp(1.25rem, 2vw, 1.75rem) clamp(1.25rem, 3vw, 2.5rem);
   border: 0;
+  border-radius: 0;
   outline: 0;
   resize: none;
   overflow-y: auto;
-  background: #fffefa;
-  color: inherit;
-  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
-  line-height: 1.75;
-  caret-color: #b45309;
+  background: var(--surface);
+  color: var(--ink);
+  caret-color: var(--ink);
+  font-size: clamp(1.0625rem, 1rem + 0.2vw, 1.1875rem);
+  line-height: 1.8;
+  letter-spacing: -0.005em;
 }
 
 .notepad:focus-visible {
-  outline: none;
-  box-shadow: inset 3px 0 0 #d97706;
+  outline: 0;
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .status-bar {
   display: flex;
-  min-height: 2.75rem;
+  min-height: 2rem;
   align-items: center;
   gap: 1rem;
-  padding: 0.6rem clamp(1rem, 4vw, 3rem);
-  border-top: 1px solid #e7e3da;
-  background: #faf8f2;
-  color: #625f57;
-  font-size: 0.875rem;
+  padding: 0.35rem clamp(1.25rem, 3vw, 2.5rem);
+  border-top: 1px solid var(--line);
+  background: var(--subtle-surface);
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  letter-spacing: 0.015em;
 }
 
 #save-state {
-  font-weight: 600;
-}
-
-#command-feedback {
-  color: #9f1239;
+  color: var(--ink);
+  font-weight: 500;
 }
 
 .counts {
@@ -199,15 +250,15 @@ textarea:focus-visible {
 
 .command-menu {
   position: absolute;
-  top: calc(100% + 0.4rem);
+  top: calc(100% + 0.5rem);
   right: 0;
   display: grid;
-  width: min(14rem, calc(100vw - 2rem));
-  padding: 0.4rem;
-  border: 1px solid #d6d2c8;
-  border-radius: 0.6rem;
-  background: #fffefa;
-  box-shadow: 0 0.75rem 2rem rgb(58 51 41 / 18%);
+  width: min(13rem, calc(100vw - 2.5rem));
+  padding: 0.375rem;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.5rem;
+  background: var(--surface);
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 10%);
 }
 
 .command-menu[hidden] {
@@ -216,19 +267,28 @@ textarea:focus-visible {
 
 .command-menu button {
   width: 100%;
-  border-color: transparent;
+  min-height: 2.5rem;
   text-align: left;
 }
 
 .command-menu .danger-button {
   margin-top: 0.25rem;
-  border-top-color: #e7e3da;
-  border-radius: 0 0 0.35rem 0.35rem;
+  border-top-color: var(--line);
+  border-radius: 0 0 0.3rem 0.3rem;
 }
 
 @media (max-width: 48rem) {
   .title-bar {
-    padding-inline: 1rem;
+    height: 3.25rem;
+    padding: 0 1rem;
+  }
+
+  .title-input {
+    font-size: 1.25rem;
+  }
+
+  .toolbar {
+    padding: 0 0.75rem;
   }
 
   .desktop-commands {
@@ -239,12 +299,18 @@ textarea:focus-visible {
     display: flex;
   }
 
+  .toolbar button {
+    min-height: 2.75rem;
+    padding-block: 0.5rem;
+  }
+
   .notepad {
     padding: 1.25rem 1rem;
+    line-height: 1.7;
   }
 
   .notepad:focus-visible {
-    box-shadow: inset 0 3px 0 #d97706;
+    box-shadow: inset 0 2px 0 var(--ink);
   }
 
   .status-bar {
@@ -263,5 +329,24 @@ textarea:focus-visible {
   .counts {
     width: 100%;
     margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  .title-input {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .title-input:focus-visible {
+    border-bottom-color: Highlight;
+  }
+
+  .notepad:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
   }
 }
