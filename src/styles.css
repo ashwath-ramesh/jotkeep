@@ -20,6 +20,19 @@
     U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+/* Metric-matched stand-in shown during the Newsreader swap window so the
+   fallback occupies the same space (overrides computed from Newsreader
+   ascent 1470 / descent 530 / xWidthAvg 857 @ 2000 upm vs Georgia's
+   1878 / 449 / 913 @ 2048 upm). */
+@font-face {
+  font-family: "Newsreader-fallback";
+  src: local("Georgia");
+  size-adjust: 96.12%;
+  ascent-override: 76.47%;
+  descent-override: 27.57%;
+  line-gap-override: 0%;
+}
+
 :root {
   color-scheme: light dark;
 
@@ -85,7 +98,9 @@
   --font-ui:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Newsreader", "Iowan Old Style", Charter, Georgia, serif;
+  --font-serif:
+    "Newsreader", "Newsreader-fallback", "Iowan Old Style", Charter, Georgia,
+    serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   font-family: var(--font-ui);
@@ -107,6 +122,12 @@
 }
 
 [hidden] {
+  display: none !important;
+}
+
+/* Pre-init guard set by the inline head script on narrow viewports; app.js
+   removes it once setSidebarOpen() owns the sidebar's hidden attribute. */
+:root[data-sidebar="closed"] .notes-sidebar {
   display: none !important;
 }
 

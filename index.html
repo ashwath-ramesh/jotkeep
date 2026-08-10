@@ -27,12 +27,24 @@
       } catch (error) {
         /* Storage access can fail; fall back to the system theme. */
       }
+      /* Pre-paint sidebar state so the desktop grid never shifts and the
+         mobile drawer never flashes; app.js takes over after init. */
+      if (window.matchMedia("(max-width: 48rem)").matches) {
+        document.documentElement.dataset.sidebar = "closed";
+      }
     </script>
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link
       rel="preload"
       href="fonts/newsreader-latin-400.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="fonts/newsreader-latin-600.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -49,7 +61,7 @@
         hidden
       ></button>
 
-      <aside id="notes-sidebar" class="notes-sidebar" aria-label="Notes" hidden>
+      <aside id="notes-sidebar" class="notes-sidebar" aria-label="Notes">
         <div class="notes-header">
           <div>
             <p class="eyebrow">JotKeep</p>
@@ -106,8 +118,8 @@
             class="sidebar-toggle"
             type="button"
             aria-controls="notes-sidebar"
-            aria-expanded="false"
-            aria-label="Show notes panel"
+            aria-expanded="true"
+            aria-label="Hide notes panel"
           >
             <span aria-hidden="true">☰</span>
             <span class="sidebar-toggle-label">Notes</span>

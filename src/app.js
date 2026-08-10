@@ -428,7 +428,6 @@ function createNoteListItem(savedNote) {
   selectButton.type = "button";
   selectButton.className = "note-select";
   selectButton.dataset.noteId = savedNote.id;
-  selectButton.setAttribute("aria-label", `Open ${displayTitle}`);
   if (savedNote.id === notesDocument.activeNoteId) {
     selectButton.setAttribute("aria-current", "true");
   }
@@ -1789,6 +1788,10 @@ for (const button of document.querySelectorAll('[data-action="clear"]')) {
 }
 
 function setSidebarOpen(open, { returnFocus = false, focusPanel = false } = {}) {
+  /* The inline head script may have hidden the drawer pre-paint; from the
+     first call onward the hidden attribute below is the single source of
+     truth. */
+  delete document.documentElement.dataset.sidebar;
   const isBlockingDrawer = open && narrowLayout.matches;
   sidebarOpen = open;
   sidebar.hidden = !open;
