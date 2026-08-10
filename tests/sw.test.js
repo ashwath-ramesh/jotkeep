@@ -59,3 +59,21 @@ test("every application-shell file is precached", () => {
     );
   }
 });
+
+test("the worker waits for consent instead of taking over old tabs", () => {
+  const installBlock = serviceWorkerSource.match(
+    /addEventListener\("install",([\s\S]*?)\n\}\);/u,
+  );
+  assert.notEqual(installBlock, null);
+  assert.equal(
+    installBlock[1].includes("self.skipWaiting"),
+    false,
+    "install must not call self.skipWaiting(); updates activate via the SKIP_WAITING message",
+  );
+  assert.match(serviceWorkerSource, /SKIP_WAITING/u);
+  assert.equal(
+    serviceWorkerSource.includes("ignoreSearch:"),
+    false,
+    "asset matching must be exact so query-busted URLs bypass stale entries",
+  );
+});
