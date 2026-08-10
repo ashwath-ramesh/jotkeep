@@ -12,6 +12,56 @@ The core promise:
 > No sign-up, no lock-in, and no silent data loss when browser storage is
 > cleared — if the user has connected or downloaded a Safety File.
 
+## Contents
+
+- [Product principles](#product-principles)
+- [Run locally](#run-locally)
+  - [Tests](#tests)
+- [Backup and recovery](#backup-and-recovery)
+- [Safety Files](#safety-files)
+  - [`.jotkeep` format version 1](#jotkeep-format-version-1)
+- [Browser storage durability](#browser-storage-durability)
+- [Feature roadmap](#feature-roadmap)
+  - [Phase 1 — Reliable single-note MVP](#phase-1--reliable-single-note-mvp)
+  - [Phase 2 — Multiple notes](#phase-2--multiple-notes)
+  - [Phase 3 — Find, replace, and insert tools](#phase-3--find-replace-and-insert-tools)
+  - [Phase 4 — Portable backup foundation](#phase-4--portable-backup-foundation)
+  - [Phase 5 — Storage architecture and browser durability](#phase-5--storage-architecture-and-browser-durability)
+  - [Phase 6 — The JotKeep Safety File](#phase-6--the-jotkeep-safety-file)
+  - [Phase 7 — Time Machine and recovery](#phase-7--time-machine-and-recovery)
+  - [Phase 8 — Optional encrypted Safety Files](#phase-8--optional-encrypted-safety-files)
+  - [Phase 9 — Everyday polish, preferences, and printing](#phase-9--everyday-polish-preferences-and-printing)
+  - [Phase 10 — Installable, offline, and cross-browser](#phase-10--installable-offline-and-cross-browser)
+  - [Phase 11 — Account-free device transfer](#phase-11--account-free-device-transfer)
+  - [Phase 12 — Launch readiness and optional hosted sync](#phase-12--launch-readiness-and-optional-hosted-sync)
+- [Sustainability boundaries](#sustainability-boundaries)
+- [Suggested interface](#suggested-interface)
+- [Current data model](#current-data-model)
+- [Source structure](#source-structure)
+- [Keyboard shortcuts to support](#keyboard-shortcuts-to-support)
+- [Testing strategy](#testing-strategy)
+- [Privacy and security](#privacy-and-security)
+- [Definition of done](#definition-of-done)
+- [Attribution](#attribution)
+
+## Product principles
+
+- **Local first:** editing is fast and works offline. Notes leave browser
+  storage only through an explicit user action.
+- **No account required:** the core application works without sign-up, a
+  backend, or a network connection.
+- **User owned:** backups use an open, versioned format with plain-text and
+  JSON escape routes.
+- **Hard to lose work:** every edit is saved automatically, backup health is
+  visible, and recovery is tested as carefully as saving.
+- **Honest security:** browser persistence, external backup, and encryption
+  are different things. Never describe one as another.
+- **Keyboard friendly:** common editor operations have predictable shortcuts.
+- **Focused by default:** advanced controls stay out of the writing area
+  until needed.
+- **Accessible and responsive:** all core actions work with a keyboard, a
+  screen reader, touch, and a narrow viewport.
+
 ## Run locally
 
 The application has no runtime dependencies and no build step. Serve the
@@ -137,24 +187,6 @@ makes automatic eviction less likely. It does not create an external backup,
 and the user can still delete the data in the browser's site-data settings.
 The storage status at the bottom of the editor shows whether persistence was
 granted and reports storage, quota, and migration problems.
-
-## Product principles
-
-- **Local first:** editing is fast and works offline. Notes leave browser
-  storage only through an explicit user action.
-- **No account required:** the core application works without sign-up, a
-  backend, or a network connection.
-- **User owned:** backups use an open, versioned format with plain-text and
-  JSON escape routes.
-- **Hard to lose work:** every edit is saved automatically, backup health is
-  visible, and recovery is tested as carefully as saving.
-- **Honest security:** browser persistence, external backup, and encryption
-  are different things. Never describe one as another.
-- **Keyboard friendly:** common editor operations have predictable shortcuts.
-- **Focused by default:** advanced controls stay out of the writing area
-  until needed.
-- **Accessible and responsive:** all core actions work with a keyboard, a
-  screen reader, touch, and a narrow viewport.
 
 ## Feature roadmap
 
