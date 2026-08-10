@@ -59,11 +59,23 @@ import {
 const AUTOSAVE_DELAY_MS = 500;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
 const TOOLBAR_BREAKPOINT = "(max-width: 68rem)";
+const SAFETY_PILL_LABELS = Object.freeze({
+  [SAFETY_FILE_STATES.MANUAL_ONLY]: "Manual backups",
+  [SAFETY_FILE_STATES.PENDING]: "Pending",
+  [SAFETY_FILE_STATES.WRITING]: "Backing up…",
+  [SAFETY_FILE_STATES.BACKED_UP]: "Backed up",
+  [SAFETY_FILE_STATES.NEEDS_PERMISSION]: "Permission needed",
+  [SAFETY_FILE_STATES.UNAVAILABLE]: "File unavailable",
+  [SAFETY_FILE_STATES.EXTERNAL_CHANGE]: "Changed on disk",
+  [SAFETY_FILE_STATES.FAILED]: "Backup failed",
+});
 
 const titleInput = document.querySelector("#note-title");
 const note = document.querySelector("#note");
 const saveState = document.querySelector("#save-state");
 const safetyFileStatus = document.querySelector("#safety-file-status");
+const safetyFilePill = document.querySelector("#safety-file-pill");
+const noteCountFooter = document.querySelector("#note-count-footer");
 const commandFeedback = document.querySelector("#command-feedback");
 const wordCount = document.querySelector("#word-count");
 const characterCount = document.querySelector("#character-count");
@@ -141,6 +153,60 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
 });
+
+const THEME_STORAGE_KEY = "jotkeep.theme.v1";
+const THEME_SEQUENCE = ["auto", "light", "dark"];
+const THEME_ICONS = Object.freeze({ auto: "◐", light: "☀", dark: "☾" });
+const THEME_LABELS = Object.freeze({
+  auto: "System theme",
+  light: "Light theme",
+  dark: "Dark theme",
+});
+const themeToggle = document.querySelector("#theme-toggle");
+const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]');
+
+function currentTheme() {
+  let stored = null;
+  try {
+    stored = localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    return "auto";
+  }
+  return stored === "light" || stored === "dark" ? stored : "auto";
+}
+
+function applyTheme(mode) {
+  if (mode === "auto") {
+    delete document.documentElement.dataset.theme;
+  } else {
+    document.documentElement.dataset.theme = mode;
+  }
+  try {
+    if (mode === "auto") {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      localStorage.setItem(THEME_STORAGE_KEY, mode);
+    }
+  } catch {
+    /* The theme still applies for this visit. */
+  }
+  const next =
+    THEME_SEQUENCE[(THEME_SEQUENCE.indexOf(mode) + 1) % THEME_SEQUENCE.length];
+  const label = `${THEME_LABELS[mode]}. Switch to ${THEME_LABELS[next].toLowerCase()}`;
+  themeToggle.textContent = THEME_ICONS[mode];
+  themeToggle.setAttribute("aria-label", label);
+  themeToggle.title = label;
+  for (const meta of themeColorMetas) {
+    const dark = mode === "auto" ? meta.media.includes("dark") : mode === "dark";
+    meta.content = dark ? "#17150f" : "#f7f5f1";
+  }
+}
+
+themeToggle.addEventListener("click", () => {
+  const sequenceIndex = THEME_SEQUENCE.indexOf(currentTheme());
+  applyTheme(THEME_SEQUENCE[(sequenceIndex + 1) % THEME_SEQUENCE.length]);
+});
+applyTheme(currentTheme());
 
 workspace.inert = true;
 workspace.setAttribute("aria-busy", "true");
@@ -255,6 +321,24 @@ function renderSafetyFileStatus() {
   }
   safetyFileStatus.textContent = message;
   safetyFileStatus.title = safetyState.error?.message ?? message;
+
+  const tone =
+    safetyState.kind === SAFETY_FILE_STATES.BACKED_UP
+      ? "success"
+      : [
+            SAFETY_FILE_STATES.NEEDS_PERMISSION,
+            SAFETY_FILE_STATES.UNAVAILABLE,
+            SAFETY_FILE_STATES.EXTERNAL_CHANGE,
+            SAFETY_FILE_STATES.FAILED,
+          ].includes(safetyState.kind)
+        ? "warning"
+        : "neutral";
+  safetyFileStatus.dataset.tone = tone;
+  safetyFilePill.dataset.tone = tone;
+  safetyFilePill.textContent = SAFETY_PILL_LABELS[safetyState.kind]
+    ? `Safety File · ${SAFETY_PILL_LABELS[safetyState.kind]}`
+    : "";
+  safetyFilePill.hidden = !SAFETY_PILL_LABELS[safetyState.kind];
 
   for (const button of document.querySelectorAll('[data-file-action="create-safety"]')) {
     button.hidden = !directSafetyFilesSupported;
@@ -398,6 +482,7 @@ function renderNotes() {
       : "";
   sortSelect.value = notesDocument.preferences.sortBy;
   listViewSelect.value = notesDocument.preferences.listView;
+  noteCountFooter.textContent = `${pluralizedCount(notesDocument.notes.length, "note", "notes")} · local first`;
 }
 
 function showActiveNote({ focus = "none" } = {}) {
@@ -433,6 +518,7 @@ const autosave = createAutosave({
   },
   onStateChange: (state) => {
     saveState.textContent = `Local: ${state}`;
+    saveState.dataset.saved = String(state === SAVE_STATES.SAVED);
     if (state === SAVE_STATES.SAVED) {
       storageIssue = null;
       renderStorageStatus();
@@ -1422,7 +1508,7 @@ function refreshFindStatus() {
   setFindStatus(
     currentIndex === -1
       ? pluralizedCount(matches.length, "match", "matches")
-      : `${currentIndex + 1} of ${matches.length}`,
+      : `Match ${currentIndex + 1} of ${matches.length}`,
   );
 }
 

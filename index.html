@@ -8,7 +8,35 @@
       content="A minimal, private notepad that saves in your browser."
     />
     <title>JotKeep</title>
-    <link rel="icon" href="data:," />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#f7f5f1"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#17150f"
+    />
+    <script>
+      try {
+        var storedTheme = localStorage.getItem("jotkeep.theme.v1");
+        if (storedTheme === "light" || storedTheme === "dark") {
+          document.documentElement.dataset.theme = storedTheme;
+        }
+      } catch (error) {
+        /* Storage access can fail; fall back to the system theme. */
+      }
+    </script>
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link
+      rel="preload"
+      href="fonts/newsreader-latin-400.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -64,6 +92,11 @@
           <ul id="notes-list" class="notes-list" aria-label="Saved notes"></ul>
           <p id="notes-empty-state" class="notes-empty-state" role="status" hidden></p>
         </div>
+
+        <footer class="sidebar-footer">
+          <span id="note-count-footer">0 notes · local first</span>
+          <span>No account. No lock-in.</span>
+        </footer>
       </aside>
 
       <section class="workspace" aria-label="Active note">
@@ -88,6 +121,21 @@
             placeholder="Untitled Note"
             autocomplete="off"
           />
+          <span
+            id="safety-file-pill"
+            class="safety-pill"
+            data-tone="neutral"
+            aria-hidden="true"
+            hidden
+          ></span>
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            aria-label="System theme"
+          >
+            ◐
+          </button>
         </header>
 
         <div class="toolbar" role="toolbar" aria-label="Editing commands">
@@ -311,7 +359,7 @@
         </section>
 
         <footer class="status-bar">
-          <span id="save-state" role="status" aria-live="polite">Local: Saved</span>
+          <span id="save-state" role="status" aria-live="polite" data-saved="true">Local: Saved</span>
           <span id="safety-file-status" role="status" aria-live="polite">
             Safety File: Checking…
           </span>
@@ -429,7 +477,7 @@
         </button>
       </div>
       <div class="dialog-content">
-        <p id="restore-summary" class="dialog-copy"></p>
+        <p id="restore-summary" class="dialog-copy file-summary"></p>
         <p id="restore-error" class="dialog-error" role="alert" hidden></p>
         <fieldset id="restore-options" class="restore-options">
           <legend>Choose how to restore</legend>
@@ -497,7 +545,7 @@
         <button id="safety-open-close" class="dialog-close" type="button" aria-label="Cancel opening Safety File">×</button>
       </div>
       <div class="dialog-content">
-        <p id="safety-open-summary" class="dialog-copy"></p>
+        <p id="safety-open-summary" class="dialog-copy file-summary"></p>
         <p id="safety-open-error" class="dialog-error" role="alert" hidden></p>
         <fieldset id="safety-open-options" class="restore-options">
           <legend>Choose how to open this notebook</legend>
@@ -528,7 +576,7 @@
         <button id="safety-conflict-close" class="dialog-close" type="button" aria-label="Close Safety File conflict">×</button>
       </div>
       <div class="dialog-content">
-        <p class="dialog-copy">Automatic updates are paused so neither copy is silently replaced. Choose which notebook to keep.</p>
+        <p class="dialog-copy warning-card">Automatic updates are paused so neither copy is silently replaced. Choose which notebook to keep.</p>
         <p id="safety-conflict-error" class="dialog-error" role="alert" hidden></p>
       </div>
       <div class="dialog-actions safety-conflict-actions">
@@ -540,6 +588,19 @@
       </div>
     </dialog>
 
+    <script>
+      if (
+        "serviceWorker" in navigator &&
+        (location.protocol === "https:" ||
+          ["localhost", "127.0.0.1"].includes(location.hostname))
+      ) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./sw.js", { updateViaCache: "none" })
+            .catch(() => {});
+        });
+      }
+    </script>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>

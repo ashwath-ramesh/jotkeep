@@ -21,6 +21,7 @@ The core promise:
 - [Safety Files](#safety-files)
   - [`.jotkeep` format version 1](#jotkeep-format-version-1)
 - [Browser storage durability](#browser-storage-durability)
+- [Offline, installation, and theming](#offline-installation-and-theming)
 - [Feature roadmap](#feature-roadmap)
   - [Phase 1 — Reliable single-note MVP](#phase-1--reliable-single-note-mvp)
   - [Phase 2 — Multiple notes](#phase-2--multiple-notes)
@@ -77,6 +78,11 @@ Open <http://localhost:8080>.
 
 Do not open `index.html` directly from disk. Browsers can block module
 imports and clipboard access on `file://` pages.
+
+A service worker caches the application shell on `localhost` and on HTTPS
+origins. After you edit a file, the browser can serve the old cached copy.
+To see your change, increase `CACHE_VERSION` in `sw.js`, or unregister the
+service worker in the browser developer tools and reload.
 
 ### Tests
 
@@ -186,6 +192,23 @@ makes automatic eviction less likely. It does not create an external backup,
 and the user can still delete the data in the browser's site-data settings.
 The storage status at the bottom of the editor shows whether persistence was
 granted and reports storage, quota, and migration problems.
+
+## Offline, installation, and theming
+
+- A service worker (`sw.js`) caches every application file when the page
+  first loads. Later visits load from the cache first, so the app opens
+  immediately and works without a network connection.
+- The cache name comes from the `CACHE_VERSION` constant in `sw.js`.
+  Increase the constant when any cached file changes. The unit test
+  `tests/sw.test.js` fails if a shipped file is missing from the cache list.
+- `manifest.webmanifest` and `icons/icon.svg` make the app installable.
+- The interface has a light theme and a dark theme. By default the browser
+  selects one with the `prefers-color-scheme` media query. The toggle in the
+  title bar overrides this with a fixed light or dark theme. The choice is
+  stored in `localStorage` in this browser only.
+- The editor uses the Newsreader typeface. The two subsetted font files
+  (about 46 KB in total) are served from the `fonts/` directory in this
+  repository. The app requests no file from any other origin.
 
 ## Feature roadmap
 
@@ -384,8 +407,8 @@ Acceptance criteria:
 ### Phase 10 — Installable, offline, and cross-browser
 
 - [ ] Make menus operable with the arrow, Enter, Escape, and Tab keys
-- [ ] Add an installable web app manifest and icons
-- [ ] Cache the application shell for offline use
+- [x] Add an installable web app manifest and icons
+- [x] Cache the application shell for offline use
 - [ ] Apply application updates without loss of unsaved work
 - [ ] Warn when browser or Safety File storage is near its quota
 - [ ] Add automated unit, integration, and end-to-end tests
@@ -509,6 +532,14 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 ```text
 .
 ├── index.html
+├── sw.js                  # service worker: application-shell precache
+├── manifest.webmanifest
+├── icons/
+│   └── icon.svg
+├── fonts/                 # subsetted Newsreader files, licensed under the OFL
+│   ├── newsreader-latin-400.woff2
+│   ├── newsreader-latin-600.woff2
+│   └── OFL.txt
 ├── src/
 │   ├── app.js             # initialization and event wiring
 │   ├── autosave.js        # debounce, flush, and save-state transitions
@@ -531,9 +562,11 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 │   ├── notes.test.js
 │   ├── safety-file-format.test.js
 │   ├── safety-file.test.js
-│   └── storage.test.js
+│   ├── storage.test.js
+│   └── sw.test.js
 └── e2e/
     ├── backup.spec.js
+    ├── offline.spec.js
     ├── safety-file.spec.js
     └── storage.spec.js
 ```
@@ -569,17 +602,17 @@ Give priority to the paths where users can lose data:
 
 - **Unit tests:** word counts, search matches, replace-all, filename
   sanitization, note sorting, backup validation, snapshot retention, format
-  compatibility, and schema migrations.
+  compatibility, schema migrations, and the service-worker cache list.
 - **Integration tests:** debounced autosave, note switches, failed storage
   writes, `localStorage` migration, file-permission changes, interrupted
   Safety File writes, import and export, encryption errors, and preference
   restoration.
 - **End-to-end tests:** create and edit notes, reload, search, delete,
   export a backup, clear site data, restore, connect a Safety File, recover
-  an older note, and print.
+  an older note, offline reload, and print.
 - **Manual checks:** keyboard-only use, screen-reader labels, touch layout,
-  200% zoom, offline reload, cross-browser file fallbacks, Unicode, very
-  long lines, and large notes.
+  200% zoom, cross-browser file fallbacks, Unicode, very long lines, and
+  large notes.
 
 Before a phase is marked complete, test the successful path and also
 cancellation, invalid input, unavailable storage, and quota-exceeded
@@ -588,6 +621,8 @@ behavior.
 ## Privacy and security
 
 - Do not send note content to analytics, logs, or third-party services.
+- Serve all assets, including fonts, from this repository. The app must not
+  request files from another origin.
 - Do not render note content as HTML. Treat it as plain text to prevent
   script injection.
 - Validate the backup shape, version, field types, and size limits before an
@@ -614,6 +649,9 @@ A feature is complete when:
 - the related checkbox and documentation are updated.
 
 ## Attribution
+
+The Newsreader typeface is copyright The Newsreader Project Authors and is
+used under the [SIL Open Font License, Version 1.1](fonts/OFL.txt).
 
 [OnlineNotepad.org](https://onlinenotepad.org/) is only a product reference.
 This project is an independent implementation. It has no affiliation with
