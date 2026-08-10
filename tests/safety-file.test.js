@@ -28,9 +28,15 @@ function documentFixture(content = "One") {
   };
 }
 
-function memoryHandle(initialText = "") {
+function memoryHandle(initialText = "", options = {}) {
   let text = initialText;
   let permission = "granted";
+  let failClose = options.failClose ?? false;
+  let truncateTo = options.truncateTo ?? null;
+  let staleReads = options.staleReads ?? 0;
+  const omitAbort = options.omitAbort ?? false;
+  let staleText = null;
+  let abortCalls = 0;
   return {
     kind: "file",
     name: "Notebook.jotkeep",
@@ -41,7 +47,12 @@ function memoryHandle(initialText = "") {
       return permission;
     },
     async getFile() {
-      const bytes = new TextEncoder().encode(text);
+      let served = text;
+      if (staleReads > 0 && staleText !== null) {
+        staleReads -= 1;
+        served = staleText;
+      }
+      const bytes = new TextEncoder().encode(served);
       return {
         name: this.name,
         size: bytes.byteLength,
@@ -53,15 +64,24 @@ function memoryHandle(initialText = "") {
     },
     async createWritable() {
       let pending = text;
-      return {
+      const writable = {
         async write(value) {
           pending = String(value);
         },
         async close() {
-          text = pending;
+          if (failClose) {
+            throw new Error("disk full");
+          }
+          staleText = text;
+          text = truncateTo === null ? pending : pending.slice(0, truncateTo);
         },
-        async abort() {},
       };
+      if (!omitAbort) {
+        writable.abort = async () => {
+          abortCalls += 1;
+        };
+      }
+      return writable;
     },
     setText(value) {
       text = value;
@@ -71,6 +91,18 @@ function memoryHandle(initialText = "") {
     },
     setPermission(value) {
       permission = value;
+    },
+    setFailClose(value) {
+      failClose = value;
+    },
+    setTruncateTo(value) {
+      truncateTo = value;
+    },
+    setStaleReads(value) {
+      staleReads = value;
+    },
+    getAbortCalls() {
+      return abortCalls;
     },
   };
 }
@@ -292,4 +324,110 @@ test("a connection switch is aborted when the previous capability cannot be reti
   assert.equal(persistedConnection.handle, oldHandle);
   assert.equal(coordinator.getConnection().handle, oldHandle);
   assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.FAILED);
+});
+
+test("a failed close aborts the writable and reports a write failure", async () => {
+  const handle = memoryHandle("seed", { failClose: true });
+
+  await assert.rejects(
+    () => writeSafetyFile(handle, documentFixture(), { cryptoObject }),
+    (error) => error.kind === SAFETY_FILE_FAILURES.WRITE,
+  );
+  assert.equal(handle.getText(), "seed");
+  assert.equal(handle.getAbortCalls(), 1);
+});
+
+test("a failed close without an abort method still reports a write failure", async () => {
+  const handle = memoryHandle("seed", { failClose: true, omitAbort: true });
+
+  await assert.rejects(
+    () => writeSafetyFile(handle, documentFixture(), { cryptoObject }),
+    (error) => error.kind === SAFETY_FILE_FAILURES.WRITE,
+  );
+  assert.equal(handle.getText(), "seed");
+});
+
+test("a torn commit is reported as a verification failure", async () => {
+  const handle = memoryHandle("", { truncateTo: 20 });
+
+  await assert.rejects(
+    () => writeSafetyFile(handle, documentFixture(), { cryptoObject }),
+    (error) =>
+      error.kind === SAFETY_FILE_FAILURES.VERIFY &&
+      /could not verify/u.test(error.message),
+  );
+  assert.equal(handle.getText().length, 20);
+});
+
+test("a stale read-back is reported as a verification failure", async () => {
+  const handle = memoryHandle();
+  await writeSafetyFile(handle, documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+
+  handle.setStaleReads(1);
+  await assert.rejects(
+    () => writeSafetyFile(handle, documentFixture("Two"), { cryptoObject }),
+    (error) => error.kind === SAFETY_FILE_FAILURES.VERIFY,
+  );
+});
+
+test("a torn backup write fails honestly and recovers through explicit overwrite", async () => {
+  const handle = memoryHandle();
+  const coordinator = createSafetyFileCoordinator({
+    storageService: {
+      async saveSafetyFileConnection() {},
+      async disconnectSafetyFile() {},
+    },
+    directSupported: true,
+    cryptoObject,
+  });
+  await coordinator.create(handle, documentFixture());
+
+  handle.setTruncateTo(20);
+  coordinator.markDirty();
+  coordinator.localSaveSettled(documentFixture("Two"));
+  await coordinator.waitForIdle();
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.FAILED);
+  assert.equal(coordinator.getState().error.kind, SAFETY_FILE_FAILURES.VERIFY);
+  assert.equal(handle.getText().length, 20);
+
+  handle.setTruncateTo(null);
+  coordinator.localSaveSettled(documentFixture("Two"));
+  await coordinator.waitForIdle();
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.EXTERNAL_CHANGE);
+  assert.equal(handle.getText().length, 20);
+
+  assert.equal(await coordinator.overwrite(documentFixture("Two")), true);
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
+  assert.equal(JSON.parse(handle.getText()).document.notes[0].content, "Two");
+});
+
+test("a close failure leaves pending work that retries once the file recovers", async () => {
+  const handle = memoryHandle();
+  const coordinator = createSafetyFileCoordinator({
+    storageService: {
+      async saveSafetyFileConnection() {},
+      async disconnectSafetyFile() {},
+    },
+    directSupported: true,
+    cryptoObject,
+  });
+  await coordinator.create(handle, documentFixture());
+  const before = handle.getText();
+
+  handle.setFailClose(true);
+  coordinator.markDirty();
+  coordinator.localSaveSettled(documentFixture("Two"));
+  await coordinator.waitForIdle();
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.FAILED);
+  assert.equal(coordinator.getState().error.kind, SAFETY_FILE_FAILURES.WRITE);
+  assert.equal(handle.getText(), before);
+
+  handle.setFailClose(false);
+  coordinator.localSaveSettled(documentFixture("Two"));
+  await coordinator.waitForIdle();
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
+  assert.equal(JSON.parse(handle.getText()).document.notes[0].content, "Two");
 });

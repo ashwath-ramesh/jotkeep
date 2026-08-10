@@ -131,6 +131,79 @@ test("connected files update after local autosave and pause on external changes"
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
 });
 
+test("a torn Safety File write fails honestly and recovers without touching local notes", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.__safetyText = "";
+    window.__safetyTornWrites = 0;
+    const handle = {
+      kind: "file",
+      name: "Torn.jotkeep",
+      queryPermission: async () => "granted",
+      requestPermission: async () => "granted",
+      getFile: async () => {
+        const bytes = new TextEncoder().encode(window.__safetyText);
+        return {
+          name: "Torn.jotkeep",
+          size: bytes.byteLength,
+          lastModified: Date.now(),
+          arrayBuffer: async () => bytes.buffer,
+        };
+      },
+      createWritable: async () => {
+        let pending = window.__safetyText;
+        return {
+          write: async (value) => {
+            pending = String(value);
+          },
+          close: async () => {
+            if (window.__safetyTornWrites > 0) {
+              window.__safetyTornWrites -= 1;
+              window.__safetyText = pending.slice(0, 40);
+              return;
+            }
+            window.__safetyText = pending;
+          },
+          abort: async () => {},
+        };
+      },
+    };
+    window.showOpenFilePicker = async () => [handle];
+    window.showSaveFilePicker = async () => handle;
+  });
+  await page.goto("/");
+
+  await (await openFileAction(page, "Create Safety File…")).click();
+  await expect(page.locator("#safety-file-status")).toContainText("Backed up");
+
+  await page.evaluate(() => {
+    window.__safetyTornWrites = 1;
+  });
+  await page.locator("#note").fill("Local copy survives the torn write");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+  await expect(page.locator("#safety-file-status")).toContainText(
+    "Backup failed; local copy is safe",
+  );
+  await expect(page.locator("#safety-file-status")).not.toContainText(
+    "Changed outside JotKeep",
+  );
+  await expect(page.locator("#note")).toHaveValue(
+    "Local copy survives the torn write",
+  );
+
+  await page.locator("#note").fill("Recovered after the torn write");
+  await expect(page.locator("#safety-file-status")).toContainText(
+    "Changed outside JotKeep",
+  );
+  await (await openFileAction(page, "Resolve Safety File conflict…")).click();
+  await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await expect(page.locator("#safety-file-status")).toContainText("Backed up");
+  expect(
+    await page.evaluate(() => JSON.parse(window.__safetyText).document.notes[0].content),
+  ).toBe("Recovered after the torn write");
+});
+
 test("disconnect and clearing local data never modify external Safety File bytes", async ({
   page,
 }) => {

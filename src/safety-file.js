@@ -165,7 +165,22 @@ export async function writeSafetyFile(
       throw error;
     }
 
-    const verified = await readSafetyFileHandle(handle, { cryptoObject });
+    let verified;
+    try {
+      verified = await readSafetyFileHandle(handle, { cryptoObject });
+    } catch (error) {
+      const classified = classifyFileError(error);
+      if (classified.kind === SAFETY_FILE_FAILURES.INVALID) {
+        // Unparseable content right after our own write is a torn write,
+        // not an externally-corrupted file.
+        throw new SafetyFileFailure(
+          SAFETY_FILE_FAILURES.VERIFY,
+          "JotKeep wrote the Safety File, but could not verify the saved contents.",
+          { cause: error },
+        );
+      }
+      throw classified;
+    }
     if (
       verified.digest !== expectedWrittenDigest ||
       JSON.stringify(verified.value) !== JSON.stringify(value)
