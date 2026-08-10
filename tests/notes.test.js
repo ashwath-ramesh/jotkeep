@@ -165,3 +165,30 @@ test("preference changes do not mutate note timestamps", () => {
   });
   assert.strictEqual(result.notes, original.notes);
 });
+
+test("updateNote never moves updatedAt backwards when the clock rolls back", () => {
+  const document = notesDocument();
+  const before = document.notes.find((note) => note.id === "note_a").updatedAt;
+
+  const updated = updateNote(document, "note_a", { content: "Rollback edit" }, {
+    now: () => new Date("2001-01-01T00:00:00.000Z"),
+  });
+  const note = updated.notes.find((item) => item.id === "note_a");
+  assert.equal(note.content, "Rollback edit");
+  assert.equal(note.updatedAt, before);
+
+  const forward = updateNote(updated, "note_a", { content: "Later edit" }, {
+    now: () => new Date("2030-01-01T00:00:00.000Z"),
+  });
+  assert.equal(
+    forward.notes.find((item) => item.id === "note_a").updatedAt,
+    "2030-01-01T00:00:00.000Z",
+  );
+});
+
+test("notePreview stays bounded for very large notes", () => {
+  const huge = `${"word ".repeat(500_000)}end`;
+  const preview = notePreview({ content: huge });
+  assert.ok(preview.length <= 161);
+  assert.ok(preview.startsWith("word word"));
+});

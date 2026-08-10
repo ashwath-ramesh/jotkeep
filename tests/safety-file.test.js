@@ -431,3 +431,161 @@ test("a close failure leaves pending work that retries once the file recovers", 
   assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
   assert.equal(JSON.parse(handle.getText()).document.notes[0].content, "Two");
 });
+
+test("a generated fallback notebook never overwrites a connected Safety File", async () => {
+  let persistedConnection = null;
+  const storageService = {
+    async saveSafetyFileConnection(value) {
+      persistedConnection = value;
+    },
+    async disconnectSafetyFile() {
+      persistedConnection = null;
+    },
+  };
+  const handle = memoryHandle();
+  const original = createSafetyFileCoordinator({
+    storageService,
+    directSupported: true,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await original.create(handle, documentFixture("Precious notes"));
+  const before = handle.getText();
+
+  // Simulate a reload where the notebook records were lost (for example a
+  // cross-tab clear raced the connection write) and storage handed the app a
+  // freshly generated blank document alongside the remembered connection.
+  const generatedDocument = {
+    version: 2,
+    activeNoteId: "note_fresh",
+    notes: [{
+      id: "note_fresh",
+      title: "",
+      content: "",
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+    }],
+    preferences: { sortBy: "updatedAt", listView: "detailed" },
+  };
+  const reloaded = createSafetyFileCoordinator({
+    storageService,
+    initialConnection: persistedConnection,
+    directSupported: true,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await reloaded.initialize(generatedDocument, { documentGenerated: true });
+
+  assert.equal(reloaded.getState().kind, SAFETY_FILE_STATES.EXTERNAL_CHANGE);
+  assert.equal(handle.getText(), before);
+
+  // Later local saves must stay paused until the user resolves the conflict.
+  reloaded.markDirty();
+  reloaded.localSaveSettled(generatedDocument);
+  await reloaded.waitForIdle();
+  assert.equal(reloaded.getState().kind, SAFETY_FILE_STATES.EXTERNAL_CHANGE);
+  assert.equal(handle.getText(), before);
+
+  // "Use Safety File" recovery: adopting the file's notebook resumes backups.
+  const read = await readSafetyFileHandle(handle, { cryptoObject });
+  await reloaded.connectVerified(handle, read, read.value.document);
+  assert.equal(reloaded.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
+  assert.equal(handle.getText(), before);
+  assert.equal(
+    JSON.parse(handle.getText()).document.notes[0].content,
+    "Precious notes",
+  );
+});
+
+test("initialize with a generated document that matches the connection stays on the normal path", async () => {
+  let persistedConnection = null;
+  const storageService = {
+    async saveSafetyFileConnection(value) {
+      persistedConnection = value;
+    },
+    async disconnectSafetyFile() {},
+  };
+  const handle = memoryHandle();
+  const original = createSafetyFileCoordinator({
+    storageService,
+    directSupported: true,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await original.create(handle, documentFixture());
+
+  const reloaded = createSafetyFileCoordinator({
+    storageService,
+    initialConnection: persistedConnection,
+    directSupported: true,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await reloaded.initialize(documentFixture(), { documentGenerated: true });
+  assert.equal(reloaded.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
+});
+
+test("an oversized notebook reports a distinct failure, not an external change", async () => {
+  const handle = memoryHandle();
+  const coordinator = createSafetyFileCoordinator({
+    storageService: {
+      async saveSafetyFileConnection() {},
+      async disconnectSafetyFile() {},
+    },
+    directSupported: true,
+    cryptoObject,
+  });
+  await coordinator.create(handle, documentFixture());
+  const before = handle.getText();
+
+  coordinator.markDirty();
+  coordinator.localSaveSettled(documentFixture("x".repeat(26 * 1024 * 1024)));
+  await coordinator.waitForIdle();
+
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.FAILED);
+  assert.equal(coordinator.getState().error.kind, SAFETY_FILE_FAILURES.TOO_LARGE);
+  assert.equal(handle.getText(), before);
+});
+
+test("grant does not claim success when verification finds an external change", async () => {
+  const handle = memoryHandle();
+  const coordinator = createSafetyFileCoordinator({
+    storageService: {
+      async saveSafetyFileConnection() {},
+      async disconnectSafetyFile() {},
+    },
+    directSupported: true,
+    cryptoObject,
+  });
+  await coordinator.create(handle, documentFixture());
+
+  handle.setPermission("prompt");
+  coordinator.markDirty();
+  coordinator.localSaveSettled(documentFixture("Two"));
+  await coordinator.waitForIdle();
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.NEEDS_PERMISSION);
+
+  handle.setPermission("granted");
+  handle.setText(`${handle.getText()}\n`);
+  assert.equal(await coordinator.grant(documentFixture("Two")), false);
+  assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.EXTERNAL_CHANGE);
+});
+
+test("written Safety Files embed a checksum and corrupted notes are rejected", async () => {
+  const handle = memoryHandle();
+  const read = await writeSafetyFile(handle, documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  assert.match(JSON.parse(handle.getText()).checksum, /^[0-9a-f]{64}$/u);
+  assert.equal(read.value.document.notes[0].content, "One");
+
+  const corrupted = JSON.parse(handle.getText());
+  corrupted.document.notes[0].content = "Silently flipped";
+  handle.setText(`${JSON.stringify(corrupted, null, 2)}\n`);
+
+  await assert.rejects(
+    () => readSafetyFileHandle(handle, { cryptoObject }),
+    (error) => /checksum/u.test(error.message),
+  );
+});

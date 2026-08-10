@@ -131,3 +131,38 @@ test("merge appends all notes, regenerates collisions, and keeps local context",
   assert.equal(merged.notes[1].createdAt, CREATED_AT);
   assert.equal(current.notes.length, 1);
 });
+
+test("parseBackup clamps impossible note timestamps instead of rejecting", () => {
+  const document = documentFixture();
+  document.notes[0].updatedAt = "2020-01-01T00:00:00.000Z";
+  const backup = createBackup(documentFixture(), { now: () => new Date(CREATED_AT) });
+  backup.document.notes[0].updatedAt = "2020-01-01T00:00:00.000Z";
+  const parsed = parseBackup(JSON.stringify(backup));
+  assert.equal(parsed.document.notes[0].updatedAt, parsed.document.notes[0].createdAt);
+});
+
+test("backup checksums verify intact files and reject corrupted notes", async () => {
+  const { webcrypto } = await import("node:crypto");
+  const { notebookChecksum } = await import("../src/safety-file-format.js");
+  const { verifyBackupChecksum } = await import("../src/backup.js");
+  const cryptoObject = globalThis.crypto ?? webcrypto;
+
+  const backup = createBackup(documentFixture(), { now: () => new Date(CREATED_AT) });
+  backup.checksum = await notebookChecksum(backup.document, { cryptoObject });
+  assert.doesNotThrow(() => parseBackup(serializeBackup(backup)));
+  await verifyBackupChecksum(backup, { cryptoObject });
+
+  const legacy = createBackup(documentFixture(), { now: () => new Date(CREATED_AT) });
+  await verifyBackupChecksum(legacy, { cryptoObject }); // no checksum → passes
+
+  backup.document.notes[0].content = "Silently flipped";
+  await assert.rejects(
+    () => verifyBackupChecksum(backup, { cryptoObject }),
+    (error) => error instanceof BackupValidationError && /checksum/u.test(error.message),
+  );
+
+  assert.throws(
+    () => parseBackup(JSON.stringify({ ...legacy, checksum: "not-hex" })),
+    /invalid checksum/u,
+  );
+});

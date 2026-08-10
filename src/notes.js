@@ -67,8 +67,27 @@ export function displayNoteTitle(note) {
   return title === "" ? UNTITLED_NOTE : title;
 }
 
+const PREVIEW_MAX_CHARACTERS = 160;
+
 export function notePreview(note) {
-  const preview = note.content.replace(/\s+/gu, " ").trim();
+  // Early-terminating scan: a multi-megabyte note must not be normalized in
+  // full (and duplicated into the sidebar DOM) to render a one-line preview.
+  let preview = "";
+  let pendingSpace = false;
+  for (const character of note.content) {
+    if (/\s/u.test(character)) {
+      pendingSpace = preview !== "";
+      continue;
+    }
+    if (pendingSpace) {
+      preview += " ";
+      pendingSpace = false;
+    }
+    preview += character;
+    if (preview.length >= PREVIEW_MAX_CHARACTERS) {
+      break;
+    }
+  }
   return preview === "" ? "No content" : preview;
 }
 
@@ -92,12 +111,15 @@ export function updateNote(
     return notesDocument;
   }
 
+  // Clamp against the previous stamp so a clock rollback cannot move a note
+  // backwards in time and break ordering or change detection.
+  const timestamp = timestampFrom(now);
   const notes = [...notesDocument.notes];
   notes[noteIndex] = {
     ...previousNote,
     title,
     content,
-    updatedAt: timestampFrom(now),
+    updatedAt: timestamp > previousNote.updatedAt ? timestamp : previousNote.updatedAt,
   };
 
   return { ...notesDocument, notes };

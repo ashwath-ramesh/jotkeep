@@ -85,6 +85,25 @@ export function isValidNotesDocument(value) {
   return ids.has(value.activeNoteId);
 }
 
+/* Migration policy for impossible note timestamps (updatedAt earlier than
+   createdAt): imported documents are normalized by clamping updatedAt up to
+   createdAt instead of rejecting the whole file, so old or hand-edited
+   backups stay restorable. */
+export function clampNoteTimestamps(document) {
+  if (!document?.notes?.some((note) => note.updatedAt < note.createdAt)) {
+    return document;
+  }
+
+  return {
+    ...document,
+    notes: document.notes.map((note) =>
+      note.updatedAt < note.createdAt
+        ? { ...note, updatedAt: note.createdAt }
+        : note,
+    ),
+  };
+}
+
 export function createNotesDocument(options = {}) {
   const note = createNote([], options);
 

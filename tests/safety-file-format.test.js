@@ -111,3 +111,31 @@ test("Safety File byte helpers preserve UTF-8 and produce stable fingerprints", 
     "jotkeep-safety-2026-08-09T12-00-00Z.jotkeep",
   );
 });
+
+test("a clock rollback cannot move a Safety File revision backwards in time", () => {
+  const LATER = "2026-08-10T12:00:00.000Z";
+  const EARLIER = "2026-08-08T12:00:00.000Z";
+  const first = createSafetyFile(documentFixture(), { now: () => new Date(LATER) });
+
+  const next = createSafetyFile(documentFixture(), {
+    previous: first,
+    now: () => new Date(EARLIER),
+  });
+  assert.equal(next.createdAt, first.createdAt);
+  assert.equal(next.updatedAt, first.updatedAt);
+  assert.doesNotThrow(() => serializeSafetyFile(next));
+});
+
+test("parsing clamps impossible note timestamps instead of rejecting the file", () => {
+  const value = createSafetyFile(documentFixture(), { now: () => new Date(CREATED_AT) });
+  value.document.notes[0].updatedAt = "2020-01-01T00:00:00.000Z";
+  const parsed = parseSafetyFile(JSON.stringify(value));
+  assert.equal(parsed.document.notes[0].updatedAt, parsed.document.notes[0].createdAt);
+});
+
+test("createSafetyFile normalizes impossible note timestamps on write", () => {
+  const document = documentFixture();
+  document.notes[0].updatedAt = "2020-01-01T00:00:00.000Z";
+  const value = createSafetyFile(document, { now: () => new Date(CREATED_AT) });
+  assert.equal(value.document.notes[0].updatedAt, value.document.notes[0].createdAt);
+});

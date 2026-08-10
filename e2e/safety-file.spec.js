@@ -119,6 +119,9 @@ test("connected files update after local autosave and pause on external changes"
   await page.evaluate(() => {
     const value = JSON.parse(window.__safetyText);
     value.document.notes[0].content = "External copy wins";
+    // An external writer that does not produce checksums; a stale embedded
+    // checksum would (correctly) be rejected as possible corruption.
+    delete value.checksum;
     window.__safetyText = `${JSON.stringify(value, null, 2)}\n`;
   });
   await page.locator("#note").fill("Local copy loses after confirmation");

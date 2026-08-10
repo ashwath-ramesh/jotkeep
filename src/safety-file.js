@@ -4,8 +4,10 @@ import {
   createSafetyFile,
   decodeSafetyFile,
   fingerprintText,
+  notebookChecksum,
   parseSafetyFile,
   serializeSafetyFile,
+  verifyEmbeddedChecksum,
 } from "./safety-file-format.js";
 
 export const SAFETY_FILE_STATES = Object.freeze({
@@ -25,6 +27,7 @@ export const SAFETY_FILE_FAILURES = Object.freeze({
   UNAVAILABLE: "unavailable",
   EXTERNAL_CHANGE: "external-change",
   INVALID: "invalid",
+  TOO_LARGE: "too-large",
   WRITE: "write",
   VERIFY: "verify",
 });
@@ -47,9 +50,12 @@ function classifyFileError(error, fallback = SAFETY_FILE_FAILURES.UNAVAILABLE) {
     return error;
   }
   if (error instanceof SafetyFileValidationError) {
-    return new SafetyFileFailure(SAFETY_FILE_FAILURES.INVALID, error.message, {
-      cause: error,
-    });
+    // A local notebook that is too large is not an external-file problem;
+    // keep it distinct so the UI does not offer conflict resolution for it.
+    const kind = error.code === "too-large"
+      ? SAFETY_FILE_FAILURES.TOO_LARGE
+      : SAFETY_FILE_FAILURES.INVALID;
+    return new SafetyFileFailure(kind, error.message, { cause: error });
   }
   if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
     return new SafetyFileFailure(
@@ -86,6 +92,7 @@ export async function readSafetyFile(file, { cryptoObject = globalThis.crypto } 
   const bytes = await file.arrayBuffer();
   const text = decodeSafetyFile(bytes);
   const value = parseSafetyFile(text, { byteLength: file.size });
+  await verifyEmbeddedChecksum(value, { cryptoObject });
   return {
     value,
     text,
@@ -150,6 +157,7 @@ export async function writeSafetyFile(
     }
 
     const value = createSafetyFile(document, { previous, now, idFactory });
+    value.checksum = await notebookChecksum(value.document, { cryptoObject });
     const text = serializeSafetyFile(value);
     const expectedWrittenDigest = await fingerprintText(text, { cryptoObject });
     const writable = await handle.createWritable();
@@ -318,12 +326,18 @@ export function createSafetyFileCoordinator({
         return SAFETY_FILE_STATES.EXTERNAL_CHANGE;
       case SAFETY_FILE_FAILURES.UNAVAILABLE:
         return SAFETY_FILE_STATES.UNAVAILABLE;
+      case SAFETY_FILE_FAILURES.TOO_LARGE:
       default:
         return SAFETY_FILE_STATES.FAILED;
     }
   }
 
   async function verify(document, { synchronize = false } = {}) {
+    if (suspended) {
+      // A suspension (conflict guard, connection switch, or restore in
+      // progress) owns the state; verifying now could mask it.
+      return null;
+    }
     if (!connection) {
       setState(
         directSupported
@@ -372,7 +386,7 @@ export function createSafetyFileCoordinator({
     }
   }
 
-  async function initialize(document) {
+  async function initialize(document, { documentGenerated = false } = {}) {
     if (!directSupported) {
       connection = null;
       setState(SAFETY_FILE_STATES.MANUAL_ONLY);
@@ -381,6 +395,22 @@ export function createSafetyFileCoordinator({
     if (!connection) {
       setState(SAFETY_FILE_STATES.DISCONNECTED);
       return;
+    }
+    if (documentGenerated) {
+      const documentHash = await notebookDigest(document, cryptoObject);
+      if (documentHash !== connection.notebookDigest) {
+        // The connection survived but the local notebook did not (for example
+        // a cross-tab clear raced a connection write). Auto-syncing would
+        // overwrite the only external copy with a generated blank notebook,
+        // so pause writes and route through the conflict-resolution dialog.
+        suspended = true;
+        const failure = new SafetyFileFailure(
+          SAFETY_FILE_FAILURES.EXTERNAL_CHANGE,
+          "The local notebook was reset while this Safety File stayed connected. Automatic updates are paused so the Safety File is not overwritten.",
+        );
+        setState(SAFETY_FILE_STATES.EXTERNAL_CHANGE, { error: failure });
+        return;
+      }
     }
     await verify(document, { synchronize: true });
   }
@@ -486,7 +516,13 @@ export function createSafetyFileCoordinator({
         return false;
       }
       await verify(document, { synchronize: true });
-      return currentState.kind !== SAFETY_FILE_STATES.NEEDS_PERMISSION;
+      // Success means verification reached a healthy state — not merely
+      // "permission granted"; a conflict or failure must not read as verified.
+      return [
+        SAFETY_FILE_STATES.BACKED_UP,
+        SAFETY_FILE_STATES.PENDING,
+        SAFETY_FILE_STATES.WRITING,
+      ].includes(currentState.kind);
     } catch (rawError) {
       const error = classifyFileError(rawError);
       setState(errorState(error), { error });

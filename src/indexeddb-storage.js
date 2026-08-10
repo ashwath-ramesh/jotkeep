@@ -695,7 +695,15 @@ export function createBrowserStorageService({
         lastBackupMetadata = clone(existing.backup);
         writeProtected = false;
         initializationError = null;
-        if (legacyValuesPresent) {
+        // Legacy localStorage data is only deleted when it matches the
+        // notebook IndexedDB already holds. Divergent legacy data (for
+        // example an older still-open tab that kept writing localStorage
+        // after this browser migrated) is preserved rather than erased.
+        const legacyMatchesStored =
+          legacy.error === null &&
+          (legacy.document === null ||
+            documentsEqual(legacy.document, existing.document));
+        if (legacyValuesPresent && legacyMatchesStored) {
           pendingLegacyCleanupKeys = [...JOTKEEP_STORAGE_KEYS];
           try {
             finishLegacyCleanup();
@@ -709,6 +717,7 @@ export function createBrowserStorageService({
         await persistenceStatus();
         return {
           document: clone(existing.document),
+          documentGenerated: false,
           lastBackupMetadata: clone(existing.backup),
           safetyFileConnection: clone(existing.safetyFileConnection),
           storageAvailable: initializationError === null,
@@ -724,6 +733,7 @@ export function createBrowserStorageService({
         await persistenceStatus();
         return {
           document: fallbackDocument,
+          documentGenerated: true,
           lastBackupMetadata: null,
           safetyFileConnection: null,
           storageAvailable: true,
@@ -752,6 +762,7 @@ export function createBrowserStorageService({
           await persistenceStatus();
           return {
             document: clone(legacy.document),
+            documentGenerated: false,
             lastBackupMetadata: clone(legacy.backup),
             safetyFileConnection: null,
             storageAvailable: true,
@@ -770,6 +781,7 @@ export function createBrowserStorageService({
           await persistenceStatus();
           return {
             document: clone(legacy.document),
+            documentGenerated: false,
             lastBackupMetadata: clone(legacy.backup),
             safetyFileConnection: null,
             storageAvailable: false,
@@ -805,6 +817,7 @@ export function createBrowserStorageService({
       await persistenceStatus();
       return {
         document: fallbackDocument,
+        documentGenerated: true,
         lastBackupMetadata: clone(backupMetadata),
         safetyFileConnection: clone(existing.safetyFileConnection),
         storageAvailable: true,
@@ -821,6 +834,7 @@ export function createBrowserStorageService({
       await persistenceStatus();
       return {
         document: clone(legacy.document ?? fallbackDocument),
+        documentGenerated: legacy.document === null,
         lastBackupMetadata: clone(legacy.backup),
         safetyFileConnection: null,
         storageAvailable: false,

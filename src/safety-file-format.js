@@ -1,13 +1,41 @@
-import { isValidNotesDocument } from "./storage.js";
+import { clampNoteTimestamps, isValidNotesDocument } from "./storage.js";
 
 export const SAFETY_FILE_FORMAT = "jotkeep-safety-file";
 export const SAFETY_FILE_VERSION = 1;
 export const MAX_SAFETY_FILE_BYTES = 25 * 1024 * 1024;
 
 export class SafetyFileValidationError extends Error {
-  constructor(message) {
+  constructor(message, { code = null } = {}) {
     super(message);
     this.name = "SafetyFileValidationError";
+    this.code = code;
+  }
+}
+
+const CHECKSUM_PATTERN = /^[0-9a-f]{64}$/u;
+
+/* Detects accidental corruption (bit rot, truncation-with-valid-JSON, sync
+   mangling) of a downloaded file — not malicious tampering, which could
+   recompute the checksum. */
+export async function notebookChecksum(
+  document,
+  { cryptoObject = globalThis.crypto } = {},
+) {
+  return fingerprintText(JSON.stringify(document), { cryptoObject });
+}
+
+export async function verifyEmbeddedChecksum(
+  value,
+  { cryptoObject = globalThis.crypto } = {},
+) {
+  if (typeof value?.checksum !== "string") {
+    return; // Files from older versions carry no checksum.
+  }
+  if (value.checksum !== (await notebookChecksum(value.document, { cryptoObject }))) {
+    throw new SafetyFileValidationError(
+      "The file's embedded checksum does not match its notes. The file may be corrupted; restore from another copy.",
+      { code: "checksum-mismatch" },
+    );
   }
 }
 
@@ -55,7 +83,12 @@ export function createSafetyFile(
     validateSafetyFile(previous);
   }
 
-  const updatedAt = timestamp(now);
+  // Clamp against the previous revision so a clock rollback cannot produce a
+  // file whose update time precedes its creation time and gets rejected.
+  let updatedAt = timestamp(now);
+  if (previous !== null && updatedAt < previous.updatedAt) {
+    updatedAt = previous.updatedAt;
+  }
   return {
     format: SAFETY_FILE_FORMAT,
     version: SAFETY_FILE_VERSION,
@@ -63,7 +96,9 @@ export function createSafetyFile(
     revisionId: idFactory(),
     createdAt: previous?.createdAt ?? updatedAt,
     updatedAt,
-    document: structuredClone(document),
+    // Normalized on write as well as on parse so a round-trip through disk
+    // reproduces the same bytes and write verification stays exact.
+    document: clampNoteTimestamps(structuredClone(document)),
   };
 }
 
@@ -92,6 +127,9 @@ export function validateSafetyFile(value) {
   if (!isIsoTimestamp(value.createdAt) || !isIsoTimestamp(value.updatedAt)) {
     throw new SafetyFileValidationError("The Safety File has invalid timestamps.");
   }
+  if (value.checksum !== undefined && !CHECKSUM_PATTERN.test(value.checksum)) {
+    throw new SafetyFileValidationError("The Safety File has an invalid checksum field.");
+  }
   if (value.createdAt > value.updatedAt) {
     throw new SafetyFileValidationError(
       "The Safety File update time is earlier than its creation time.",
@@ -112,6 +150,7 @@ export function serializeSafetyFile(value) {
   if (new TextEncoder().encode(text).byteLength > MAX_SAFETY_FILE_BYTES) {
     throw new SafetyFileValidationError(
       "This notebook is too large for a Safety File. Download important notes as text files.",
+      { code: "too-large" },
     );
   }
   return text;
@@ -131,7 +170,8 @@ export function parseSafetyFile(text, { byteLength } = {}) {
       "The selected Safety File is not valid JSON or is incomplete.",
     );
   }
-  return validateSafetyFile(value);
+  validateSafetyFile(value);
+  return { ...value, document: clampNoteTimestamps(value.document) };
 }
 
 export function decodeSafetyFile(buffer) {

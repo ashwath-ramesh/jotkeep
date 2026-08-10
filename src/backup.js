@@ -1,5 +1,8 @@
 import { createNoteId } from "./notes.js";
-import { isValidNotesDocument } from "./storage.js";
+import { notebookChecksum } from "./safety-file-format.js";
+import { clampNoteTimestamps, isValidNotesDocument } from "./storage.js";
+
+const CHECKSUM_PATTERN = /^[0-9a-f]{64}$/u;
 
 export const BACKUP_FORMAT = "jotkeep-backup";
 export const BACKUP_VERSION = 1;
@@ -105,7 +108,7 @@ export function createBackup(document, { now = () => new Date() } = {}) {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     createdAt,
-    document: structuredClone(document),
+    document: clampNoteTimestamps(structuredClone(document)),
   };
 }
 
@@ -143,6 +146,10 @@ export function validateBackup(value) {
     throw new BackupValidationError("The backup has an invalid creation date.");
   }
 
+  if (value.checksum !== undefined && !CHECKSUM_PATTERN.test(value.checksum)) {
+    throw new BackupValidationError("The backup has an invalid checksum field.");
+  }
+
   if (!isValidNotesDocument(value.document)) {
     throw new BackupValidationError(
       "The backup contains invalid notes or preferences and cannot be restored.",
@@ -169,7 +176,24 @@ export function parseBackup(text, { byteLength } = {}) {
   }
 
   validateBackup(parsed);
-  return parsed;
+  return { ...parsed, document: clampNoteTimestamps(parsed.document) };
+}
+
+/* Detects accidental corruption of a stored backup file (bit rot, sync
+   mangling that still parses as JSON) — not malicious tampering. Backups
+   from older versions carry no checksum and pass unchecked. */
+export async function verifyBackupChecksum(
+  backup,
+  { cryptoObject = globalThis.crypto } = {},
+) {
+  if (typeof backup?.checksum !== "string") {
+    return;
+  }
+  if (backup.checksum !== (await notebookChecksum(backup.document, { cryptoObject }))) {
+    throw new BackupValidationError(
+      "The backup's embedded checksum does not match its notes. The file may be corrupted; restore from another copy.",
+    );
+  }
 }
 
 export function decodeUtf8(buffer, { maxBytes = MAX_TEXT_FILE_BYTES } = {}) {
