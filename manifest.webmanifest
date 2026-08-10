@@ -1,8 +1,10 @@
 {
+  "id": "./",
   "name": "JotKeep",
   "short_name": "JotKeep",
   "description": "A minimal, private notepad that saves in your browser.",
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#fbfaf7",
   "theme_color": "#f7f5f1",
@@ -14,9 +16,21 @@
       "purpose": "any"
     },
     {
-      "src": "icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ]
