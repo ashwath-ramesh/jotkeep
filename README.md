@@ -202,6 +202,8 @@ granted and reports storage, quota, and migration problems.
   Increase the constant when any cached file changes. The unit test
   `tests/sw.test.js` fails if a shipped file is missing from the cache list.
 - `manifest.webmanifest` and `icons/icon.svg` make the app installable.
+- The design system behind the interface is documented in
+  [DESIGN.md](DESIGN.md).
 - The interface has a light theme and a dark theme. By default the browser
   selects one with the `prefers-color-scheme` media query. The toggle in the
   title bar overrides this with a fixed light or dark theme. The choice is
@@ -532,6 +534,7 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 ```text
 .
 ├── index.html
+├── DESIGN.md              # design-system intent behind the CSS tokens
 ├── sw.js                  # service worker: application-shell precache
 ├── manifest.webmanifest
 ├── icons/
