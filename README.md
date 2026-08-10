@@ -1,46 +1,30 @@
 # JotKeep
 
-A privacy-first, browser-based plain-text editor whose notes remain usable,
-portable, and recoverable without requiring a JotKeep account. The long-term
-product goal is a fast, install-free notepad with a user-owned **Safety File**:
-an automatically updated, optionally encrypted notebook file with version
-history that lives outside browser storage.
+JotKeep is a privacy-first, plain-text notepad that runs in the browser. It
+needs no installation and no account. Notes stay usable, portable, and
+recoverable without JotKeep. The long-term goal adds a user-owned **Safety
+File**: a notebook file, with optional encryption and version history, that
+JotKeep updates automatically and keeps outside browser storage.
 
-The core promise is:
+The core promise:
 
 > No sign-up, no lock-in, and no silent data loss when browser storage is
-> cleared—as long as the user has connected or downloaded a Safety File.
+> cleared — if the user has connected or downloaded a Safety File.
 
 ## Project status
 
-Phase 6 is complete. The repository contains a modular, runtime-dependency-free
-multiple-note application with:
+Phase 6 is complete. The application supports many notes, uses focused
+modules, and has no runtime dependencies. The checked items in Phases 1–6 of
+the roadmap list the completed features.
 
-- a titled, spellchecked plain-text editor with a responsive notes sidebar;
-- note creation, selection, renaming, confirmed deletion, search, and sorting;
-- compact and detailed note-list views with a persistent active note;
-- debounced, transactional IndexedDB persistence with one record per note;
-- verified, lossless migration from the version 2 `localStorage` notebook and
-  both earlier single-note formats;
-- visible save state plus live word and character counts;
-- familiar editing commands and confirmed clearing;
-- literal find and replace with case and whole-word options;
-- date-time, special-character, and emoji insertion tools;
-- UTF-8 text import and portable active-note downloads;
-- validated, versioned JSON backup with merge-or-replace recovery;
-- confirmed local-data clearing and visible last-backup creation time;
-- a versioned, verified `.jotkeep` Safety File with automatic direct-file
-  updates where supported and explicit download fallback everywhere; and
-- an accessible toolbar that adapts to narrow screens.
-
-Later phases in this README remain the implementation roadmap. Check an item
-only after its behavior and acceptance criteria are complete.
+The later phases are the implementation roadmap. Check an item only after its
+behavior and acceptance criteria are complete.
 
 ## Run locally
 
-There are no runtime dependencies or build steps. Serve the repository with any
-static file server so JavaScript modules, browser storage, and clipboard APIs run
-in a normal web origin.
+The application has no runtime dependencies and no build step. Serve the
+repository with a static file server. This gives JavaScript modules, browser
+storage, and the clipboard a normal web origin.
 
 ```bash
 git clone <repository-url>
@@ -50,9 +34,13 @@ python3 -m http.server 8080
 
 Open <http://localhost:8080>.
 
-The automated tests require Node.js 20 or newer. Install the development-only
-Playwright dependency and its Chromium browser, then run both unit and browser
-tests:
+Do not open `index.html` directly from disk. Browsers can block module
+imports and clipboard access on `file://` pages.
+
+### Tests
+
+The tests need Node.js 20 or newer. Install the development-only Playwright
+dependency, install its Chromium browser, and run the unit and browser tests:
 
 ```bash
 npm install
@@ -62,54 +50,58 @@ npm test
 
 Run only the dependency-free unit tests with `npm run test:unit`.
 
-Opening `index.html` directly is not supported because browsers may block local
-JavaScript module imports and clipboard access.
-
 ## Backup and recovery
 
-JotKeep autosaves notes to browser storage, but browser storage is **not a
-backup**: clearing site data, resetting the browser profile, or removing the
-browser can erase it. Use **File → Export JSON backup** to create a versioned
-file containing every note, timestamp, active-note selection, and current list
-preference, then keep that downloaded file somewhere outside the browser.
+JotKeep saves notes to browser storage automatically. Browser storage is
+**not a backup**. The browser can erase it when the user clears site data,
+resets the profile, or removes the browser.
 
-**Restore JSON backup** validates the entire file before changing anything.
-Merge adds copies of all backup notes while keeping the current active note and
-preferences; Replace explicitly replaces the current notebook and preferences.
-The status-bar date records when this browser last created a JSON backup. It
-does not verify that the downloaded file still exists. Clearing JotKeep data
-does not delete files that were already downloaded.
+Use **File → Export JSON backup** to create a versioned backup file. The file
+contains every note, all timestamps, the active-note selection, and the list
+preference. Keep the file outside the browser.
 
-Individual `.txt` files are a plain-text escape route. Opening one creates a new
-note, while downloading a note exports its body without formatting markup.
+**Restore JSON backup** validates the full file before it changes anything.
+Merge adds copies of all backup notes and keeps the current active note and
+preferences. Replace replaces the current notebook and preferences. The date
+in the status bar shows when this browser last created a JSON backup. It does
+not show that the file still exists. When the user clears JotKeep data, files
+that were already downloaded stay on disk.
+
+Single `.txt` files are a plain-text escape route. An opened `.txt` file
+becomes a new note. A downloaded note contains only the note body, without
+formatting markup.
 
 ## Safety Files
 
-A Safety File is a complete, user-owned notebook stored outside browser data.
-Use **File → Create Safety File** in browsers that support direct file access,
-or **Download Safety File** in any browser. A connected file is updated only
-after the local IndexedDB autosave succeeds. JotKeep closes the external write,
-reads the file back, validates it, and compares its SHA-256 fingerprint before
-showing **Backed up**.
+A Safety File is a complete, user-owned notebook file outside browser data.
+Use **File → Create Safety File** in browsers that support direct file
+access. Use **Download Safety File** in all other browsers.
 
-The local-save and Safety-File states are intentionally separate. Losing file
-permission, moving the file, or changing it in another program pauses automatic
-updates without affecting the local notebook. **Grant Safety File access** can
-restore stale permission. An external change must be resolved explicitly by
-using the external notebook, overwriting it with the local notebook, or
-disconnecting it. Disconnecting and clearing JotKeep site data remove the
-remembered connection but never delete the external file.
+JotKeep updates a connected file only after the local IndexedDB save
+succeeds. It then closes the write, reads the file back, validates it, and
+compares its SHA-256 fingerprint. Only then does it show **Backed up**.
 
-Direct access requires a secure context and browser support for the File System
-Access API. JotKeep detects those capabilities at runtime. Where they are not
-available, opening and verifying use a normal file input and saving creates an
-explicit download. A downloaded file cannot be automatically updated or proven
-to remain on disk, and the interface says so before the user relies on it.
+The local-save state and the Safety-File state are separate. When file
+permission is lost, the file moves, or another program changes the file,
+JotKeep pauses automatic updates. The local notebook is not changed. **Grant
+Safety File access** restores stale permission.
+
+The user must resolve an external change explicitly: use the external
+notebook, overwrite it with the local notebook, or disconnect it.
+Disconnecting or clearing JotKeep site data removes the remembered
+connection. It never deletes the external file.
+
+Direct file access needs a secure context and browser support for the File
+System Access API. JotKeep detects these capabilities at runtime. Without
+direct access, open and verify use a normal file input, and save creates a
+download. JotKeep cannot update a downloaded file automatically and cannot
+prove that it stays on disk. The interface says this before the user relies
+on it.
 
 ### `.jotkeep` format version 1
 
-Safety Files are UTF-8 JSON with a 25 MiB limit. The format envelope is
-versioned separately from the embedded application document:
+A Safety File is UTF-8 JSON with a 25 MiB limit. The format envelope has its
+own version, separate from the embedded application document:
 
 ```json
 {
@@ -139,38 +131,38 @@ versioned separately from the embedded application document:
 }
 ```
 
-`fileId` and `createdAt` remain stable for the life of a connected file;
-`revisionId` and `updatedAt` change on every verified write. Each note retains
-its own `createdAt` and `updatedAt` timestamps. Unknown or incompatible format
-versions are rejected without importing anything. The format is unencrypted in
-Phase 6; optional encryption is a separately versioned future envelope.
+`fileId` and `createdAt` stay stable for the life of a connected file.
+`revisionId` and `updatedAt` change on each verified write. Each note keeps
+its own `createdAt` and `updatedAt` timestamps. JotKeep rejects unknown or
+incompatible format versions and imports nothing. The format is unencrypted
+in Phase 6. Optional encryption is a future envelope with its own version.
 
 ## Browser storage durability
 
-JotKeep stores notes as individual records in IndexedDB. Use **File → Keep data
-on this device** to ask the browser for persistent storage. A grant makes
-automatic eviction less likely; it does not create an external backup and does
-not prevent the user from deleting the data through browser site-data settings.
-The storage status at the bottom of the editor reports whether persistence was
-granted and whether storage, quota, or migration problems need attention.
+JotKeep stores each note as one record in IndexedDB. Use **File → Keep data
+on this device** to request persistent storage from the browser. A grant
+makes automatic eviction less likely. It does not create an external backup,
+and the user can still delete the data in the browser's site-data settings.
+The storage status at the bottom of the editor shows whether persistence was
+granted and reports storage, quota, and migration problems.
 
 ## Product principles
 
-- **Local first:** editing is fast and offline; notes leave browser storage only
-  through an explicit user action.
-- **No account required:** the core app works without sign-up, a backend, or a
-  network connection.
-- **User owned:** backups use an open, versioned format with plain-text and JSON
-  escape routes.
+- **Local first:** editing is fast and works offline. Notes leave browser
+  storage only through an explicit user action.
+- **No account required:** the core application works without sign-up, a
+  backend, or a network connection.
+- **User owned:** backups use an open, versioned format with plain-text and
+  JSON escape routes.
 - **Hard to lose work:** every edit is saved automatically, backup health is
   visible, and recovery is tested as carefully as saving.
-- **Honest security:** distinguish browser persistence, external backup, and
-  encryption; never describe one as another.
+- **Honest security:** browser persistence, external backup, and encryption
+  are different things. Never describe one as another.
 - **Keyboard friendly:** common editor operations have predictable shortcuts.
-- **Focused by default:** advanced controls stay out of the writing area until
-  needed.
-- **Accessible and responsive:** all core actions work with a keyboard, screen
-  reader, touch device, and narrow viewport.
+- **Focused by default:** advanced controls stay out of the writing area
+  until needed.
+- **Accessible and responsive:** all core actions work with a keyboard, a
+  screen reader, touch, and a narrow viewport.
 
 ## Feature roadmap
 
@@ -179,21 +171,21 @@ granted and whether storage, quota, or migration problems need attention.
 - [x] Plain-text editing surface
 - [x] Native browser spellcheck
 - [x] Restore a saved draft after refresh
-- [x] Debounce autosave instead of writing on every keystroke
-- [x] Show save state: `Saving…`, `Saved`, or `Storage unavailable`
+- [x] Debounce autosave instead of a write on each keystroke
+- [x] Show the save state: `Saving…`, `Saved`, or `Storage unavailable`
 - [x] Add a note title and persist it with the body
-- [x] Display live word and character counts
+- [x] Show live word and character counts
 - [x] Add undo, redo, cut, copy, paste, delete, and select-all commands
-- [x] Confirm before clearing a non-empty note
-- [x] Add responsive toolbar and keyboard-focus styles
+- [x] Confirm before a non-empty note is cleared
+- [x] Add a responsive toolbar and keyboard-focus styles
 
 Acceptance criteria:
 
-- Text and title survive refresh and reopening the browser.
-- A save happens within one second of the final edit.
-- An unavailable or full storage area does not break editing and produces a
-  visible warning.
-- Word count ignores surrounding/repeated whitespace; character count includes
+- The text and the title survive a refresh and a browser restart.
+- A save occurs less than one second after the last edit.
+- Unavailable or full storage does not break editing and shows a visible
+  warning.
+- The word count ignores extra whitespace. The character count includes
   spaces and line breaks.
 
 ### Phase 2 — Multiple notes
@@ -204,16 +196,16 @@ Acceptance criteria:
 - [x] Sort alphabetically, by creation date, or by last-modified date
 - [x] Offer compact and detailed note-list views
 - [x] Show an empty state when no note matches a search
-- [x] Keep the active note selected after reload
+- [x] Keep the active note selected after a reload
 - [x] Migrate the existing single-note storage value without data loss
 
 Acceptance criteria:
 
-- Creating a note never overwrites another note.
-- Switching notes first flushes pending changes to storage.
-- Search is case-insensitive and clearing it restores the full list.
-- Deletion requires confirmation and selects a sensible neighboring note.
-- Sorting changes presentation only; it does not mutate timestamps.
+- A new note never overwrites another note.
+- A note switch first flushes pending changes to storage.
+- Search is case-insensitive. A cleared search restores the full list.
+- Deletion needs confirmation and selects a sensible neighboring note.
+- Sorting changes only the presentation. It does not change timestamps.
 
 ### Phase 3 — Find, replace, and insert tools
 
@@ -223,21 +215,22 @@ Acceptance criteria:
 - [x] Insert the current date and time at the cursor
 - [x] Insert a special character at the cursor
 - [x] Insert an emoji at the cursor
-- [x] Preserve selection and cursor position when a dialog closes
+- [x] Keep the selection and cursor position when a dialog closes
 
 Acceptance criteria:
 
-- Find/replace handles empty input, no matches, multiline text, and characters
-  with special regular-expression meaning.
-- Replace-all cannot loop forever when replacement text contains search text.
-- Insertions replace selected text and otherwise occur at the caret.
-- Every text-changing command participates in autosave and updates counts.
+- Find and replace handle empty input, no matches, multiline text, and
+  characters with special regular-expression meaning.
+- Replace-all cannot loop forever when the replacement text contains the
+  search text.
+- An insertion replaces the selected text or occurs at the caret.
+- Each text-changing command starts autosave and updates the counts.
 
 ### Phase 4 — Portable backup foundation
 
 - [x] Import a UTF-8 `.txt` file into a new note
 - [x] Download the active note as a `.txt` file
-- [x] Sanitize the title before using it as a filename
+- [x] Sanitize the title before its use as a filename
 - [x] Export all notes and preferences as a versioned JSON backup
 - [x] Restore a backup after validation and explicit confirmation
 - [x] Clear all local data after explicit confirmation
@@ -245,213 +238,222 @@ Acceptance criteria:
 
 Acceptance criteria:
 
-- Canceling a file picker or dialog makes no changes.
-- Invalid or incompatible backups show an actionable error and import nothing.
-- Restore offers a clear merge-or-replace choice and never silently discards
+- A canceled file picker or dialog makes no changes.
+- An invalid or incompatible backup shows an actionable error and imports
+  nothing.
+- Restore gives a clear merge-or-replace choice and never silently discards
   existing notes.
-- Exported text preserves Unicode and line breaks.
-- A backup can be exported, local data cleared, and all notes restored in an
-  end-to-end test.
-- Backup documentation explains that browser storage is not itself a backup.
+- Exported text keeps Unicode and line breaks.
+- An end-to-end test exports a backup, clears local data, and restores all
+  notes.
+- The backup documentation says that browser storage is not a backup.
 
 ### Phase 5 — Storage architecture and browser durability
 
 - [x] Put persistence behind a small asynchronous storage adapter
 - [x] Remove direct `localStorage` access from application and UI modules
-- [x] Add an IndexedDB adapter that stores notes as individual records
+- [x] Add an IndexedDB adapter that stores each note as one record
 - [x] Migrate the version 2 `localStorage` document without data loss
 - [x] Keep the old value until the migrated IndexedDB data is verified
 - [x] Use transactions for multi-record changes
-- [x] Request persistent browser storage after an appropriate user action
+- [x] Request persistent browser storage after an applicable user action
 - [x] Report quota, denied-persistence, unavailable-storage, and migration
-  failures without blocking editing
+  failures and do not block editing
 
 Acceptance criteria:
 
-- Existing users retain every note, active-note selection, and preference after
-  migration.
-- An interrupted or failed migration leaves the original data recoverable.
-- Updating one note does not rewrite every note.
-- Failed writes never appear as successfully saved.
-- The UI states that IndexedDB and persistent storage can still be removed by a
-  user clearing site data.
+- After migration, existing users keep every note, the active-note
+  selection, and all preferences.
+- An interrupted or failed migration keeps the original data recoverable.
+- An update to one note does not rewrite every note.
+- A failed write never shows as saved.
+- The UI says that a user who clears site data also removes IndexedDB and
+  persistent storage.
 
 ### Phase 6 — The JotKeep Safety File
 
 - [x] Define and document a versioned `.jotkeep` notebook format
 - [x] Include notes, preferences, timestamps, and format metadata
 - [x] Let the user create, open, verify, and disconnect a Safety File
-- [x] Automatically update a connected file after local autosave settles
-- [x] Show distinct local-save and Safety-File backup states
-- [x] Detect stale permissions, unavailable files, and external modifications
-- [x] Fall back to explicit `.jotkeep` downloads where direct file writing is
-  unsupported
-- [x] Preserve JSON and `.txt` export so the format never becomes a lock-in
+- [x] Update a connected file automatically after the local autosave settles
+- [x] Show separate local-save and Safety-File backup states
+- [x] Detect stale permissions, unavailable files, and external changes
+- [x] Fall back to explicit `.jotkeep` downloads where the browser cannot
+  write files directly
+- [x] Keep JSON and `.txt` export so the format never becomes a lock-in
 
 Acceptance criteria:
 
-- Clearing JotKeep's site data does not affect the external Safety File.
-- Opening a valid Safety File on a fresh browser restores the notebook.
-- JotKeep never claims a backup succeeded until the external write and
-  verification succeed.
+- Cleared JotKeep site data does not change the external Safety File.
+- A valid Safety File restores the notebook in a fresh browser.
+- JotKeep claims a backup only after the external write and its verification
+  succeed.
 - Permission denial or revocation does not damage the local notebook.
-- Browser compatibility and fallback behavior are visible before the user
-  relies on automatic file updates.
+- The UI shows browser compatibility and fallback behavior before the user
+  relies on automatic updates.
 
 ### Phase 7 — Time Machine and recovery
 
 - [ ] Store space-efficient recent, daily, and weekly notebook snapshots
-- [ ] Let users preview an earlier note before restoring it
-- [ ] Restore one note, a copy of one note, or the entire notebook
-- [ ] Preserve the current state as a snapshot before any restore
-- [ ] Add a **Test my backup** action that performs a non-destructive validation
-- [ ] Show backup age and warn when no recoverable external copy exists
+- [ ] Let the user preview an earlier note before a restore
+- [ ] Restore one note, a copy of one note, or the full notebook
+- [ ] Keep the current state as a snapshot before each restore
+- [ ] Add a **Test my backup** action that does a non-destructive validation
+- [ ] Show the backup age and warn when no recoverable external copy exists
 - [ ] Apply documented retention and size limits
 
 Acceptance criteria:
 
-- A deleted or overwritten note can be recovered without replacing unrelated
-  current notes.
-- Restoring an old version is itself reversible.
-- Corrupt or incomplete snapshots are rejected without changing current data.
-- Snapshot pruning is deterministic and never removes the only current state.
+- A deleted or overwritten note can be recovered without a change to
+  unrelated current notes.
+- A restore of an old version is itself reversible.
+- A corrupt or incomplete snapshot is rejected and current data is not
+  changed.
+- Snapshot pruning is deterministic and never removes the only current
+  state.
 
 ### Phase 8 — Optional encrypted Safety Files
 
 - [ ] Encrypt and decrypt only in the browser
-- [ ] Use authenticated encryption and a password-based key derivation design
-  reviewed independently before release
-- [ ] Store versioned algorithm parameters, a unique salt, and non-secret
-  metadata needed to open the file
-- [ ] Never store or transmit the password or derived encryption key
-- [ ] Detect wrong passwords and tampered files without exposing partial data
+- [ ] Use authenticated encryption and a password-based key derivation
+  design with an independent review before release
+- [ ] Store versioned algorithm parameters, a unique salt, and the
+  non-secret metadata needed to open the file
+- [ ] Never store or transmit the password or the derived encryption key
+- [ ] Detect wrong passwords and changed files and do not expose partial
+  data
 - [ ] Provide an offline recovery-key or password-verification workflow
 - [ ] Publish a plain-language threat model and format specification
 
 Acceptance criteria:
 
 - Note titles and bodies do not appear as plaintext in an encrypted file.
-- The same file can be opened in a fresh compatible JotKeep installation with
-  the correct secret.
-- A wrong secret, modified ciphertext, truncated file, or unsupported format
+- The same file opens in a fresh compatible JotKeep installation with the
+  correct secret.
+- A wrong secret, changed ciphertext, truncated file, or unsupported format
   imports nothing.
-- The UI clearly states that JotKeep cannot recover a forgotten secret.
-- No custom cryptographic primitive is invented for the feature.
+- The UI says that JotKeep cannot recover a forgotten secret.
+- The feature does not invent a custom cryptographic primitive.
 
 ### Phase 9 — Everyday polish, preferences, and printing
 
-Formatting changes the editor's appearance, not the stored plain text.
+Formatting changes the appearance of the editor, not the stored plain text.
 
 - [ ] Toggle word wrap
 - [ ] Toggle the status bar
 - [ ] Enter and exit fullscreen mode
-- [ ] Choose font family, size, weight, style, and line spacing
-- [ ] Reset appearance settings to defaults
-- [ ] Persist preferences independently from note content
+- [ ] Choose the font family, size, weight, style, and line spacing
+- [ ] Reset appearance settings to the defaults
+- [ ] Persist preferences separately from note content
 - [ ] Add light, dark, and system color modes
 - [ ] Add documented keyboard shortcuts and a searchable command palette
-- [ ] Add a print view that hides application chrome
-- [ ] Support saving to PDF through the browser print dialog
+- [ ] Add a print view that hides the application chrome
+- [ ] Support save to PDF through the browser print dialog
 
 Acceptance criteria:
 
-- Preferences apply to every note and survive reload.
+- Preferences apply to every note and survive a reload.
 - Content exported as `.txt` contains no formatting markup.
-- Controls remain legible and usable at 200% zoom and in both color schemes.
-- Fullscreen exit remains available by keyboard and through a visible control.
-- Printed output contains the title and body, but no menus or sidebar.
+- Controls stay legible and usable at 200% zoom and in both color schemes.
+- Fullscreen exit stays available with the keyboard and a visible control.
+- Printed output contains the title and the body, but no menus or sidebar.
 
 ### Phase 10 — Installable, offline, and cross-browser
 
-- [ ] Make menus operable with arrow, Enter, Escape, and Tab keys
+- [ ] Make menus operable with the arrow, Enter, Escape, and Tab keys
 - [ ] Add an installable web app manifest and icons
 - [ ] Cache the application shell for offline use
-- [ ] Handle application updates without discarding unsaved work
+- [ ] Apply application updates without loss of unsaved work
 - [ ] Warn when browser or Safety File storage is near its quota
 - [ ] Add automated unit, integration, and end-to-end tests
-- [ ] Test current Chrome, Firefox, Safari, and Edge releases
+- [ ] Test the current Chrome, Firefox, Safari, and Edge releases
 
 Acceptance criteria:
 
-- The editor loads and existing notes remain editable while offline.
-- Every icon-only action has an accessible name and visible tooltip.
-- Focus is trapped inside modal dialogs and returns to the triggering control.
-- No normal workflow produces an uncaught console error.
+- The editor loads offline and existing notes stay editable.
+- Each icon-only action has an accessible name and a visible tooltip.
+- Focus stays in a modal dialog and returns to the control that opened it.
+- No normal workflow causes an uncaught console error.
 
 ### Phase 11 — Account-free device transfer
 
 - [ ] Export an encrypted, short-lived transfer package
-- [ ] Transfer via a QR code or an explicit file without exposing note content
-- [ ] Require confirmation on both the sending and receiving devices
-- [ ] Make replay, expiration, cancellation, and interrupted-transfer behavior
-  explicit
+- [ ] Transfer with a QR code or an explicit file and do not expose note
+  content
+- [ ] Require confirmation on the sending device and on the receiving device
+- [ ] Make replay, expiration, cancellation, and interrupted-transfer
+  behavior explicit
 - [ ] Keep device transfer separate from permanent synchronization
 
 Acceptance criteria:
 
-- A notebook can move between two devices without creating a JotKeep account.
+- A notebook can move between two devices without a JotKeep account.
 - Transfer secrets never appear in logs, analytics, or URL query parameters.
-- An expired, canceled, replayed, incomplete, or tampered transfer imports
+- An expired, canceled, replayed, incomplete, or changed transfer imports
   nothing.
-- Users can always use an offline Safety File instead of a transfer service.
+- The user can always use an offline Safety File instead of a transfer
+  service.
 
 ### Phase 12 — Launch readiness and optional hosted sync
 
-- [ ] Create an interactive recovery demo: write, clear site data, and restore
-- [ ] Publish the storage architecture, threat model, and `.jotkeep` format
-- [ ] Add opt-in, privacy-preserving operational metrics that never include note
+- [ ] Create an interactive recovery demo: write, clear site data, and
+  restore
+- [ ] Publish the storage architecture, the threat model, and the `.jotkeep`
+  format
+- [ ] Add opt-in, privacy-preserving metrics that never include note
   content, titles, filenames, file paths, or secrets
-- [ ] Commission a security review before advertising encrypted sync
-- [ ] Design optional zero-knowledge hosted sync without weakening the free,
-  account-free core
-- [ ] Document data export, deletion, retention, conflicts, quotas, and service
-  shutdown behavior before accepting payment
+- [ ] Commission a security review before encrypted sync is advertised
+- [ ] Design optional zero-knowledge hosted sync that does not weaken the
+  free, account-free core
+- [ ] Document export, deletion, retention, conflicts, quotas, and service
+  shutdown behavior before payment is accepted
 
 Acceptance criteria:
 
-- The launch demo accurately distinguishes local save from external backup.
+- The launch demo correctly separates local save from external backup.
 - The repository contains reproducible tests for migration, corruption,
   interrupted writes, recovery, and encrypted-file compatibility.
-- Core local editing, Safety Files, basic history, and data export remain usable
-  without payment or an account.
-- Paid services monetize hosting and convenience, never access to or recovery of
-  a user's own data.
+- Core local editing, Safety Files, basic history, and data export stay
+  usable without payment or an account.
+- Paid services monetize hosting and convenience, never access to or
+  recovery of a user's own data.
 
 ## Sustainability boundaries
 
-JotKeep should monetize optional infrastructure and convenience, not basic data
+JotKeep monetizes optional infrastructure and convenience, not basic data
 ownership or recovery.
 
-The free, account-free core should include local editing, import/export, a
-portable Safety File, basic version history, and offline use. Potential paid
-services may include hosted zero-knowledge synchronization, longer hosted
-history, large encrypted attachments, shared encrypted notebooks, and priority
-support. Any hosted plan must provide a complete export and a documented way to
-leave without losing access to notes.
+The free, account-free core includes local editing, import and export, a
+portable Safety File, basic version history, and offline use. Possible paid
+services include hosted zero-knowledge synchronization, longer hosted
+history, large encrypted attachments, shared encrypted notebooks, and
+priority support. Each hosted plan must give a complete export and a
+documented way to leave without loss of access to notes.
 
-An account may be required for an optional paid service, but never to open a
-local `.jotkeep` file. Billing identity, synchronization identity, and notebook
-encryption keys should remain separate concepts.
+A paid service can require an account. A local `.jotkeep` file never
+requires an account. Billing identity, synchronization identity, and
+notebook encryption keys stay separate concepts.
 
 ## Suggested interface
 
-The desktop layout should have three regions:
+The desktop layout has three regions:
 
 1. **Notes panel** — create, search, sort, switch, and delete notes.
-2. **Command bar** — File, Edit, Insert, Format, Tools, View, and Help actions.
-3. **Editor** — title, plain-text body, save status, word count, and character
-   count.
+2. **Command bar** — File, Edit, Insert, Format, Tools, View, and Help
+   actions.
+3. **Editor** — title, plain-text body, save status, word count, and
+   character count.
 
-On small screens, the notes panel becomes a drawer and secondary commands move
-into an overflow menu. The editor must remain usable without horizontal page
-scrolling.
+On small screens, the notes panel becomes a drawer and secondary commands
+move into an overflow menu. The editor must stay usable without horizontal
+page scrolling.
 
 ## Current data model
 
-The version 2 document remains the canonical application and JSON-backup shape.
-IndexedDB stores each note separately and keeps active-note selection,
-preferences, note ordering, and backup status in metadata records. The former
-version 2 `localStorage` document is read only as a migration source.
+The version 2 document is the canonical shape for the application and the
+JSON backup. IndexedDB stores each note as one record. Metadata records keep
+the active-note selection, preferences, note order, and backup status. The
+old version 2 `localStorage` document is only a migration source.
 
 ```json
 {
@@ -475,23 +477,25 @@ version 2 `localStorage` document is read only as a migration source.
 
 Implementation notes:
 
-- Generate stable IDs with `crypto.randomUUID()` and provide a fallback for
+- Generate stable IDs with `crypto.randomUUID()` and add a fallback for
   older browsers if they are in scope.
 - Store ISO 8601 UTC timestamps and format them only for display.
-- Keep transient state—open menus, search terms, selections—out of persistence.
+- Keep transient state — open menus, search terms, selections — out of
+  persistence.
 - Wrap storage reads, writes, parsing, and migrations in error handling.
-- Treat the application model, IndexedDB schema, `.jotkeep` format, snapshot
-  format, and encrypted envelope as separately versioned boundaries.
-- Keep storage adapters independent from UI code so browser storage, a Safety
-  File, and future hosted sync can share application operations without sharing
+- Version these boundaries separately: the application model, the IndexedDB
+  schema, the `.jotkeep` format, the snapshot format, and the encrypted
+  envelope.
+- Keep storage adapters separate from UI code. Browser storage, a Safety
+  File, and future hosted sync then share application operations, not
   implementation details.
-- Never remove a legacy source until the new representation has been written,
+- Never remove a legacy source before the new representation is written,
   read back, and validated.
 
 ## Source structure
 
 The application uses browser-native ES modules and has no build step. Pure
-behavior uses Node's test runner; recovery workflows use Playwright:
+behavior uses the Node test runner. Recovery workflows use Playwright:
 
 ```text
 .
@@ -525,13 +529,13 @@ behavior uses Node's test runner; recovery workflows use Playwright:
     └── storage.spec.js
 ```
 
-Future phases should continue using focused modules for Safety File access,
-snapshots, encryption, and device transfer rather than expanding `app.js` into
-a persistence layer.
+Future phases must continue to use focused modules for Safety File access,
+snapshots, encryption, and device transfer. Do not turn `app.js` into a
+persistence layer.
 
 ## Keyboard shortcuts to support
 
-Use platform conventions (`Cmd` on macOS, `Ctrl` elsewhere) and do not override
+Use platform conventions (`Cmd` on macOS, `Ctrl` elsewhere). Do not override
 browser or assistive-technology shortcuts unnecessarily.
 
 | Action | Shortcut |
@@ -547,45 +551,47 @@ browser or assistive-technology shortcuts unnecessarily.
 | Fullscreen | `F11` only when it does not conflict with the browser |
 | Close dialog or menu | `Escape` |
 
-When intercepting a browser shortcut, the app must complete the expected action
-or clearly explain why it cannot.
+When the application intercepts a browser shortcut, it must complete the
+expected action or explain why it cannot.
 
 ## Testing strategy
 
-Prioritize the paths where users could lose data:
+Give priority to the paths where users can lose data:
 
-- **Unit tests:** word counting, search matching, replace-all, filename
+- **Unit tests:** word counts, search matches, replace-all, filename
   sanitization, note sorting, backup validation, snapshot retention, format
   compatibility, and schema migrations.
-- **Integration tests:** debounced autosave, note switching, failed storage
-  writes, `localStorage` migration, file-permission changes, interrupted Safety
-  File writes, import/export, encryption errors, and preference restoration.
-- **End-to-end tests:** create and edit several notes, reload, search, delete,
-  export a backup, clear site data, restore, connect a Safety File, recover an
-  older note, and print.
-- **Manual checks:** keyboard-only use, screen-reader labels, touch layout, 200%
-  zoom, offline reload, cross-browser file fallbacks, Unicode, very long lines,
-  and large notes.
+- **Integration tests:** debounced autosave, note switches, failed storage
+  writes, `localStorage` migration, file-permission changes, interrupted
+  Safety File writes, import and export, encryption errors, and preference
+  restoration.
+- **End-to-end tests:** create and edit notes, reload, search, delete,
+  export a backup, clear site data, restore, connect a Safety File, recover
+  an older note, and print.
+- **Manual checks:** keyboard-only use, screen-reader labels, touch layout,
+  200% zoom, offline reload, cross-browser file fallbacks, Unicode, very
+  long lines, and large notes.
 
-Before marking a phase complete, test both the successful path and cancellation,
-invalid input, unavailable storage, and quota-exceeded behavior.
+Before a phase is marked complete, test the successful path and also
+cancellation, invalid input, unavailable storage, and quota-exceeded
+behavior.
 
 ## Privacy and security
 
-- Do not send note content to analytics, logging, or third-party services.
-- Do not render note content as HTML; treat it as plain text to avoid script
-  injection.
-- Validate backup shape, version, field types, and reasonable size limits before
-  importing.
-- Explain that clearing site data removes `localStorage`, IndexedDB, and stored
-  file permissions, but not a user-owned external Safety File.
-- Never place transfer or encryption secrets in query parameters, logs,
+- Do not send note content to analytics, logs, or third-party services.
+- Do not render note content as HTML. Treat it as plain text to prevent
+  script injection.
+- Validate the backup shape, version, field types, and size limits before an
+  import.
+- Explain that cleared site data removes `localStorage`, IndexedDB, and
+  stored file permissions, but not a user-owned external Safety File.
+- Never put transfer or encryption secrets in query parameters, logs,
   analytics, crash reports, or telemetry.
-- Treat filenames, file paths, note counts, timestamps, and backup metadata as
-  potentially sensitive even when note bodies are encrypted.
-- Make all networking optional for the free core. If hosted sync is added,
-  publish its threat model, retention, deletion, and metadata behavior before
-  implementation.
+- Treat filenames, file paths, note counts, timestamps, and backup metadata
+  as sensitive, even when note bodies are encrypted.
+- Keep all networking optional for the free core. Before hosted sync is
+  implemented, publish its threat model, retention, deletion, and metadata
+  behavior.
 
 ## Definition of done
 
@@ -594,12 +600,12 @@ A feature is complete when:
 - its acceptance criteria pass;
 - loading, empty, error, and cancellation states are handled;
 - it works with keyboard and touch input;
-- it has appropriate automated tests;
-- it introduces no uncaught browser-console errors; and
+- it has applicable automated tests;
+- it causes no uncaught browser-console errors; and
 - the related checkbox and documentation are updated.
 
 ## Attribution
 
-[OnlineNotepad.org](https://onlinenotepad.org/) is used only as a product
-reference. This project is an independent implementation and is not affiliated
-with or endorsed by that site.
+[OnlineNotepad.org](https://onlinenotepad.org/) is only a product reference.
+This project is an independent implementation. It has no affiliation with
+and no endorsement from that site.
