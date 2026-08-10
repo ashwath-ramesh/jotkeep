@@ -4,11 +4,12 @@ import {
   createSafetyFile,
   decodeSafetyFile,
   fingerprintText,
-  notebookChecksum,
   parseSafetyFile,
+  safetyFileChecksum,
   serializeSafetyFile,
   verifyEmbeddedChecksum,
 } from "./safety-file-format.js";
+import { emptyHistoryArchive, verifyHistoryArchive } from "./snapshots.js";
 
 export const SAFETY_FILE_STATES = Object.freeze({
   DISCONNECTED: "disconnected",
@@ -87,12 +88,13 @@ export function supportsDirectSafetyFiles(windowObject = globalThis.window) {
 
 export async function readSafetyFile(file, { cryptoObject = globalThis.crypto } = {}) {
   if (file.size > MAX_SAFETY_FILE_BYTES) {
-    throw new SafetyFileValidationError("The selected Safety File is larger than 25 MiB.");
+    throw new SafetyFileValidationError("The selected Safety File is larger than 50 MiB.");
   }
   const bytes = await file.arrayBuffer();
   const text = decodeSafetyFile(bytes);
   const value = parseSafetyFile(text, { byteLength: file.size });
   await verifyEmbeddedChecksum(value, { cryptoObject });
+  await verifyHistoryArchive(value.history, { cryptoObject });
   return {
     value,
     text,
@@ -117,6 +119,19 @@ async function notebookDigest(document, cryptoObject) {
   return fingerprintText(JSON.stringify(document), { cryptoObject });
 }
 
+async function verifiedHistoryDigest(history, cryptoObject) {
+  try {
+    await verifyHistoryArchive(history, { cryptoObject });
+  } catch (error) {
+    throw new SafetyFileFailure(
+      SAFETY_FILE_FAILURES.VERIFY,
+      "Local snapshot history failed verification. The Safety File was not changed.",
+      { cause: error },
+    );
+  }
+  return fingerprintText(JSON.stringify(history), { cryptoObject });
+}
+
 function connectionFromRead(handle, read, documentHash, verifiedAt) {
   return {
     version: 1,
@@ -137,6 +152,7 @@ export async function writeSafetyFile(
   document,
   {
     previous = null,
+    history = emptyHistoryArchive(),
     expectedDigest = null,
     force = false,
     now = () => new Date(),
@@ -145,6 +161,11 @@ export async function writeSafetyFile(
   } = {},
 ) {
   try {
+    // Verify every referenced revision before reading or opening the external
+    // file for writing. Structural validation alone cannot detect a note body
+    // that no longer matches its content-addressed revision ID.
+    await verifiedHistoryDigest(history, cryptoObject);
+
     if (!force && expectedDigest !== null) {
       const current = await readSafetyFileHandle(handle, { cryptoObject });
       if (current.digest !== expectedDigest) {
@@ -156,8 +177,13 @@ export async function writeSafetyFile(
       previous = current.value;
     }
 
-    const value = createSafetyFile(document, { previous, now, idFactory });
-    value.checksum = await notebookChecksum(value.document, { cryptoObject });
+    const value = createSafetyFile(document, {
+      previous,
+      history,
+      now,
+      idFactory,
+    });
+    value.checksum = await safetyFileChecksum(value, { cryptoObject });
     const text = serializeSafetyFile(value);
     const expectedWrittenDigest = await fingerprintText(text, { cryptoObject });
     const writable = await handle.createWritable();
@@ -211,6 +237,7 @@ export function createSafetyFileCoordinator({
   onStateChange = () => {},
   now = () => new Date(),
   cryptoObject = globalThis.crypto,
+  historyProvider = () => emptyHistoryArchive(),
 } = {}) {
   let connection = initialConnection;
   let currentState;
@@ -359,10 +386,22 @@ export function createSafetyFileCoordinator({
         );
       }
       const documentHash = await notebookDigest(document, cryptoObject);
+      const localHistory = await historyProvider();
+      const localHistoryHash = await verifiedHistoryDigest(
+        localHistory,
+        cryptoObject,
+      );
+      const fileHistoryHash = await fingerprintText(
+        JSON.stringify(read.value.history),
+        { cryptoObject },
+      );
       const remembered = await remember(
         connectionFromRead(connection.handle, read, await notebookDigest(read.value.document, cryptoObject), nowIso(now)),
       );
-      if (documentHash === connection.notebookDigest) {
+      if (
+        documentHash === connection.notebookDigest &&
+        localHistoryHash === fileHistoryHash
+      ) {
         backedRevision = changeRevision;
         setState(SAFETY_FILE_STATES.BACKED_UP, {
           verifiedAt: connection.verifiedAt,
@@ -440,6 +479,7 @@ export function createSafetyFileCoordinator({
           }
           const read = await writeSafetyFile(connection.handle, target.document, {
             expectedDigest: connection.fileDigest,
+            history: await historyProvider(),
             now,
             cryptoObject,
           });
@@ -504,7 +544,11 @@ export function createSafetyFileCoordinator({
   }
 
   async function create(handle, document) {
-    const read = await writeSafetyFile(handle, document, { now, cryptoObject });
+    const read = await writeSafetyFile(handle, document, {
+      history: await historyProvider(),
+      now,
+      cryptoObject,
+    });
     await connectVerified(handle, read, document);
     return read;
   }
@@ -543,6 +587,7 @@ export function createSafetyFileCoordinator({
       }
       const read = await writeSafetyFile(connection.handle, document, {
         previous,
+        history: await historyProvider(),
         force: true,
         now,
         cryptoObject,

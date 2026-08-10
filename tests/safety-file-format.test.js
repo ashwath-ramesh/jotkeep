@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { webcrypto } from "node:crypto";
 
 import {
+  MAX_CURRENT_DOCUMENT_BYTES,
   MAX_SAFETY_FILE_BYTES,
+  LEGACY_SAFETY_FILE_VERSION,
   SAFETY_FILE_FORMAT,
   SAFETY_FILE_VERSION,
   SafetyFileValidationError,
@@ -14,6 +16,7 @@ import {
   safetyFileFilename,
   serializeSafetyFile,
 } from "../src/safety-file-format.js";
+import { MAX_HISTORY_BYTES } from "../src/snapshots.js";
 
 const CREATED_AT = "2026-08-09T12:00:00.000Z";
 
@@ -89,8 +92,68 @@ test("Safety File parsing rejects malformed, incompatible, invalid, and oversize
   );
   assert.throws(
     () => parseSafetyFile("{}", { byteLength: MAX_SAFETY_FILE_BYTES + 1 }),
-    /larger than 25 MiB/u,
+    /larger than 50 MiB/u,
   );
+});
+
+test("Safety Files enforce separate 25 MiB notebook and history limits", () => {
+  const oversizedText = "x".repeat(MAX_CURRENT_DOCUMENT_BYTES);
+  const oversizedDocument = createSafetyFile(documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    idFactory: () => "id",
+  });
+  oversizedDocument.document.notes[0].content = oversizedText;
+  assert.throws(
+    () => parseSafetyFile(JSON.stringify(oversizedDocument)),
+    /current notebook is larger than 25 MiB/u,
+  );
+
+  assert.equal(MAX_HISTORY_BYTES, MAX_CURRENT_DOCUMENT_BYTES);
+  const oversizedHistory = {
+    format: "jotkeep-history",
+    version: 1,
+    snapshots: [{
+      id: "snapshot",
+      formatVersion: 1,
+      createdAt: CREATED_AT,
+      kind: "automatic",
+      activeNoteId: "note_a",
+      preferences: { sortBy: "updatedAt", listView: "detailed" },
+      noteRevisionIds: ["a".repeat(64)],
+      documentChecksum: "b".repeat(64),
+      byteSize: 0,
+    }],
+    noteRevisions: [{
+      revisionId: "a".repeat(64),
+      note: { ...documentFixture().notes[0], content: oversizedText },
+      byteSize: 0,
+    }],
+  };
+  const oversizedHistoryFile = createSafetyFile(documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    idFactory: () => "id",
+  });
+  oversizedHistoryFile.history = oversizedHistory;
+  assert.throws(
+    () => parseSafetyFile(JSON.stringify(oversizedHistoryFile)),
+    /snapshot history is larger than 25 MiB/u,
+  );
+});
+
+test("version 1 Safety Files remain readable with empty history", () => {
+  const legacy = {
+    format: SAFETY_FILE_FORMAT,
+    version: LEGACY_SAFETY_FILE_VERSION,
+    fileId: "legacy-file",
+    revisionId: "legacy-revision",
+    createdAt: CREATED_AT,
+    updatedAt: CREATED_AT,
+    document: documentFixture(),
+  };
+  const parsed = parseSafetyFile(JSON.stringify(legacy));
+  assert.equal(parsed.version, LEGACY_SAFETY_FILE_VERSION);
+  assert.deepEqual(parsed.history.snapshots, []);
+  assert.deepEqual(parsed.history.noteRevisions, []);
 });
 
 test("Safety File byte helpers preserve UTF-8 and produce stable fingerprints", async () => {

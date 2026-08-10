@@ -41,7 +41,7 @@ async function releaseFileRead(page) {
 async function readIndexedDbDocument(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("jotkeep", 1);
+      const request = indexedDB.open("jotkeep");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -139,7 +139,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
     listView: "compact",
   });
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup requested",
+    "No recoverable external backup verified",
   );
 
   await (await openFileAction(page, "Clear all local data…")).click();
@@ -151,7 +151,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   await expect(page.locator("#note-title")).toHaveValue("");
   await expect(page.locator("#note")).toHaveValue("");
   await expect(page.locator("#backup-status")).toHaveText(
-    "No JSON backup requested in this browser",
+    "No recoverable external backup verified",
   );
 
   await page.locator("#backup-file-input").setInputFiles({

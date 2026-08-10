@@ -46,7 +46,9 @@ import {
 } from "./indexeddb-storage.js";
 import {
   createSafetyFile,
+  fingerprintText,
   notebookChecksum,
+  safetyFileChecksum,
   safetyFileFilename,
   serializeSafetyFile,
 } from "./safety-file-format.js";
@@ -57,8 +59,10 @@ import {
   readSafetyFileHandle,
   supportsDirectSafetyFiles,
 } from "./safety-file.js";
+import { SNAPSHOT_KINDS, restoreNoteFromSnapshot } from "./snapshots.js";
 
 const AUTOSAVE_DELAY_MS = 500;
+const BACKUP_STATUS_REFRESH_MS = 60 * 1000;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
 const TOOLBAR_BREAKPOINT = "(max-width: 68rem)";
 const SAFETY_PILL_LABELS = Object.freeze({
@@ -122,6 +126,7 @@ const characterGrid = document.querySelector("#character-grid");
 const textFileInput = document.querySelector("#text-file-input");
 const backupFileInput = document.querySelector("#backup-file-input");
 const safetyFileInput = document.querySelector("#safety-file-input");
+const backupTestFileInput = document.querySelector("#backup-test-file-input");
 const restoreDialog = document.querySelector("#restore-dialog");
 const restoreSummary = document.querySelector("#restore-summary");
 const restoreError = document.querySelector("#restore-error");
@@ -130,6 +135,18 @@ const restoreChooseFile = document.querySelector("#restore-choose-file");
 const restoreCancel = document.querySelector("#restore-cancel");
 const restoreDialogClose = document.querySelector("#restore-dialog-close");
 const restoreConfirm = document.querySelector("#restore-confirm");
+const historyDialog = document.querySelector("#history-dialog");
+const historyDialogClose = document.querySelector("#history-dialog-close");
+const historySnapshotSelect = document.querySelector("#history-snapshot");
+const historyNoteSelect = document.querySelector("#history-note");
+const historySummary = document.querySelector("#history-summary");
+const historyError = document.querySelector("#history-error");
+const historyPreviewTitle = document.querySelector("#history-preview-title");
+const historyPreviewBody = document.querySelector("#history-preview-body");
+const historyRestoreNote = document.querySelector("#history-restore-note");
+const historyRestoreCopy = document.querySelector("#history-restore-copy");
+const historyRestoreNotebook = document.querySelector("#history-restore-notebook");
+const historyCancel = document.querySelector("#history-cancel");
 const clearDataDialog = document.querySelector("#clear-data-dialog");
 const clearDataSummary = document.querySelector("#clear-data-summary");
 const clearDataError = document.querySelector("#clear-data-error");
@@ -216,6 +233,8 @@ const loadedNotes = await storageService.initialize();
 let notesDocument = loadedNotes.document;
 let canSafelySave = loadedNotes.canSafelySave;
 let lastBackupMetadata = loadedNotes.lastBackupMetadata;
+let externalBackupMetadata = loadedNotes.externalBackupMetadata;
+let historyIssue = loadedNotes.historyError;
 let storageIssue = loadedNotes.error;
 let persistenceState = loadedNotes.persistenceState;
 let editorCommands;
@@ -228,6 +247,9 @@ let pendingBackup = null;
 let backupReadGeneration = 0;
 let textImportGeneration = 0;
 let restoreReturnFocus = null;
+let historyReturnFocus = null;
+let historyReadGeneration = 0;
+let selectedHistoryDocument = null;
 let clearDataReturnFocus = null;
 let notebookTransitionPending = false;
 let safetyState = null;
@@ -241,8 +263,22 @@ const safetyCoordinator = createSafetyFileCoordinator({
   directSupported: directSafetyFilesSupported,
   onStateChange: (state) => {
     safetyState = state;
+    if (state.kind === SAFETY_FILE_STATES.BACKED_UP && state.verifiedAt) {
+      const connection = safetyCoordinator.getConnection();
+      if (connection) {
+        externalBackupMetadata = {
+          version: 1,
+          kind: "safety-file",
+          identity: connection.fileId,
+          contentAt: connection.fileUpdatedAt,
+          verifiedAt: connection.verifiedAt,
+        };
+        renderBackupStatus();
+      }
+    }
     renderSafetyFileStatus();
   },
+  historyProvider: () => storageService.exportHistory(),
 });
 
 function setNotebookTransitionPending(pending) {
@@ -436,15 +472,30 @@ function renderSafetyFileStatus() {
 }
 
 function renderBackupStatus() {
-  if (lastBackupMetadata === null) {
-    backupStatus.textContent = "No JSON backup requested in this browser";
-    backupStatus.removeAttribute("title");
+  if (externalBackupMetadata === null) {
+    backupStatus.textContent = "No recoverable external backup verified";
+    backupStatus.dataset.tone = "warning";
+    backupStatus.title = lastBackupMetadata === null
+      ? "Browser storage and local history are not external backups."
+      : `A JSON download was requested ${timestampFormatter.format(new Date(lastBackupMetadata.createdAt))}, but this browser has not tested the downloaded file.`;
     return;
   }
 
-  const created = new Date(lastBackupMetadata.createdAt);
-  backupStatus.textContent = `Last JSON backup requested ${timestampFormatter.format(created)}`;
-  backupStatus.title = lastBackupMetadata.createdAt;
+  const contentDate = new Date(externalBackupMetadata.contentAt);
+  const ageMs = Math.max(0, Date.now() - contentDate.getTime());
+  const hours = Math.floor(ageMs / (60 * 60 * 1000));
+  const days = Math.floor(hours / 24);
+  const age = days > 0
+    ? pluralizedCount(days, "day", "days")
+    : hours > 0
+      ? pluralizedCount(hours, "hour", "hours")
+      : "less than an hour";
+  const stale = ageMs > 7 * 24 * 60 * 60 * 1000;
+  backupStatus.textContent = stale
+    ? `External backup is ${age} old — test or update it`
+    : `External backup: ${age} old`;
+  backupStatus.dataset.tone = stale ? "warning" : "success";
+  backupStatus.title = `Content from ${externalBackupMetadata.contentAt}; last verified ${externalBackupMetadata.verifiedAt}. Manual verification cannot prove that a file still exists afterward.`;
 }
 
 function renderStorageStatus() {
@@ -584,6 +635,7 @@ function showActiveNote({ focus = "none" } = {}) {
 showActiveNote();
 renderNotes();
 renderBackupStatus();
+window.setInterval(renderBackupStatus, BACKUP_STATUS_REFRESH_MS);
 renderStorageStatus();
 appShell.inert = false;
 appShell.removeAttribute("aria-busy");
@@ -604,7 +656,12 @@ const autosave = createAutosave({
     if (!canSafelySave) {
       throw storageIssue ?? new Error("Stored notes cannot be safely replaced.");
     }
-    await storageService.saveNotebook(structuredClone(notesDocument));
+    const result = await storageService.saveNotebook(structuredClone(notesDocument));
+    if (result?.snapshotError) {
+      setCommandFeedback(
+        `${result.snapshotError.message} Current notes were still saved.`,
+      );
+    }
   },
   onStateChange: (state) => {
     saveState.textContent = `Local: ${state}`;
@@ -947,8 +1004,10 @@ async function createDirectSafetyFile() {
 async function downloadSafetyFile() {
   await autosave.flush();
   try {
-    const value = createSafetyFile(notesDocument);
-    value.checksum = await notebookChecksum(value.document);
+    const value = createSafetyFile(notesDocument, {
+      history: storageService.exportHistory(),
+    });
+    value.checksum = await safetyFileChecksum(value);
     const serialized = serializeSafetyFile(value);
     const filename = safetyFileFilename(value.createdAt);
     downloadFile(serialized, "application/json;charset=utf-8", filename);
@@ -1070,21 +1129,21 @@ safetyOpenConfirm.addEventListener("click", async () => {
       ? mergeBackupDocument(notesDocument, read.value.document)
       : structuredClone(read.value.document);
 
-    clearRecoveryJournal();
     await safetyCoordinator.waitForIdle();
     if (selected.handle) {
       await safetyCoordinator.prepareConnectionSwitch(read.value.fileId);
     }
-    if (mode === "merge") {
-      await storageService.saveNotebook(candidate);
-    } else {
-      await storageService.replaceNotebook(candidate);
-    }
+    await storageService.restoreNotebook(candidate, {
+      currentDocument: notesDocument,
+      importedHistory: mode === "replace" ? read.value.history : null,
+    });
+    clearRecoveryJournal();
 
     textImportGeneration += 1;
     notesDocument = candidate;
     canSafelySave = true;
     storageIssue = null;
+    historyIssue = null;
     autosave.reset(SAVE_STATES.SAVED);
     saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
     searchInput.value = "";
@@ -1097,11 +1156,11 @@ safetyOpenConfirm.addEventListener("click", async () => {
         read,
         read.value.document,
       );
-      if (mode === "merge") {
-        safetyCoordinator.markDirty();
-        safetyCoordinator.localSaveSettled(candidate);
-        await safetyCoordinator.waitForIdle();
-      }
+      // Even a replacement adds the local pre-restore checkpoint and may
+      // upgrade a version 1 file, so write the verified local recovery bundle.
+      safetyCoordinator.markDirty();
+      safetyCoordinator.localSaveSettled(candidate);
+      await safetyCoordinator.waitForIdle();
     }
 
     closeSafetyOpenDialog();
@@ -1149,12 +1208,16 @@ safetyUseFile.addEventListener("click", async () => {
   try {
     const connection = safetyCoordinator.getConnection();
     const read = await readSafetyFileHandle(connection.handle);
-    await storageService.replaceNotebook(read.value.document);
+    await storageService.restoreNotebook(read.value.document, {
+      currentDocument: notesDocument,
+      importedHistory: read.value.history,
+    });
     clearRecoveryJournal();
     notesDocument = structuredClone(read.value.document);
     textImportGeneration += 1;
     canSafelySave = true;
     storageIssue = null;
+    historyIssue = null;
     autosave.reset(SAVE_STATES.SAVED);
     saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
     searchInput.value = "";
@@ -1162,6 +1225,9 @@ safetyUseFile.addEventListener("click", async () => {
     renderStorageStatus();
     showActiveNote({ focus: "body" });
     await safetyCoordinator.connectVerified(connection.handle, read, notesDocument);
+    safetyCoordinator.markDirty();
+    safetyCoordinator.localSaveSettled(notesDocument);
+    await safetyCoordinator.waitForIdle();
     closeSafetyConflictDialog();
     setCommandFeedback(`Replaced the local notebook with Safety File “${connection.fileName}”.`);
   } catch (error) {
@@ -1377,6 +1443,83 @@ async function readBackupFile(file) {
   return parsed;
 }
 
+async function rememberExternalBackup({ kind, identity, contentAt }) {
+  const verification = {
+    kind,
+    identity,
+    contentAt,
+    verifiedAt: new Date().toISOString(),
+  };
+  try {
+    externalBackupMetadata = await storageService.saveExternalBackupVerification(
+      verification,
+    );
+    renderBackupStatus();
+    return true;
+  } catch (error) {
+    reportStorageIssue(error);
+    return false;
+  }
+}
+
+async function reportTestedSafetyFile(read, label) {
+  const remembered = await rememberExternalBackup({
+    kind: "safety-file",
+    identity: read.value.fileId,
+    contentAt: read.value.updatedAt,
+  });
+  setCommandFeedback(
+    `Test passed for “${label}”: ${pluralizedCount(read.value.document.notes.length, "note", "notes")} and ${pluralizedCount(read.value.history.snapshots.length, "restore point", "restore points")} are recoverable${remembered ? "." : ", but this browser could not remember the test date."}`,
+  );
+}
+
+async function testConnectedBackup() {
+  const connection = safetyCoordinator.getConnection();
+  if (!connection) {
+    chooseFile(backupTestFileInput);
+    return;
+  }
+  try {
+    const read = await readSafetyFileHandle(connection.handle);
+    await reportTestedSafetyFile(read, connection.fileName);
+    if (read.digest !== connection.fileDigest) {
+      await safetyCoordinator.verify(notesDocument);
+    }
+  } catch (error) {
+    setCommandFeedback(`Backup test failed: ${error.message}`);
+  }
+}
+
+backupTestFileInput.addEventListener("change", async () => {
+  const [file] = backupTestFileInput.files;
+  backupTestFileInput.value = "";
+  if (!file) {
+    return;
+  }
+  try {
+    if (/\.jotkeep$/iu.test(file.name)) {
+      await reportTestedSafetyFile(await readSafetyFile(file), file.name);
+      return;
+    }
+    if (/\.json$/iu.test(file.name)) {
+      const backup = await readBackupFile(file);
+      const identity = backup.checksum ?? await fingerprintText(JSON.stringify(backup));
+      const remembered = await rememberExternalBackup({
+        kind: "json-backup",
+        identity,
+        contentAt: backup.createdAt,
+      });
+      setCommandFeedback(
+        `Test passed for “${file.name}”: ${pluralizedCount(backup.document.notes.length, "note", "notes")} are recoverable${remembered ? "." : ", but this browser could not remember the test date."}`,
+      );
+      return;
+    }
+    throw new TypeError("Choose a .jotkeep Safety File or a .json JotKeep backup.");
+  } catch (error) {
+    setCommandFeedback(`Backup test failed: ${error.message}`);
+  }
+});
+
 backupFileInput.addEventListener("change", async () => {
   const [file] = backupFileInput.files;
   if (!file) {
@@ -1453,11 +1596,9 @@ restoreConfirm.addEventListener("click", async () => {
   }
 
   try {
-    if (mode === "replace") {
-      await storageService.replaceNotebook(candidate);
-    } else {
-      await storageService.saveNotebook(candidate);
-    }
+    await storageService.restoreNotebook(candidate, {
+      currentDocument: notesDocument,
+    });
   } catch (error) {
     reportStorageIssue(error);
     restoreError.textContent =
@@ -1471,6 +1612,7 @@ restoreConfirm.addEventListener("click", async () => {
   notesDocument = candidate;
   canSafelySave = true;
   storageIssue = null;
+  historyIssue = null;
   autosave.reset(SAVE_STATES.SAVED);
   saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
   safetyCoordinator.markDirty();
@@ -1486,6 +1628,234 @@ restoreConfirm.addEventListener("click", async () => {
       : `Restored ${pluralizedCount(restoredCount, "note", "notes")} from the backup.`,
   );
 });
+
+function setHistoryActionsEnabled(enabled) {
+  historyNoteSelect.disabled = !enabled;
+  historyRestoreNote.disabled = !enabled;
+  historyRestoreCopy.disabled = !enabled;
+  historyRestoreNotebook.disabled = !enabled;
+}
+
+function renderHistoryPreview() {
+  const savedNote = selectedHistoryDocument?.notes.find(
+    (item) => item.id === historyNoteSelect.value,
+  );
+  historyPreviewTitle.textContent = savedNote ? displayNoteTitle(savedNote) : "";
+  historyPreviewBody.value = savedNote?.content ?? "";
+}
+
+async function loadSelectedHistorySnapshot() {
+  const snapshotId = historySnapshotSelect.value;
+  const generation = ++historyReadGeneration;
+  selectedHistoryDocument = null;
+  setHistoryActionsEnabled(false);
+  historyError.hidden = true;
+  historyError.textContent = "";
+  historySummary.textContent = "Validating restore point…";
+  historyPreviewTitle.textContent = "";
+  historyPreviewBody.value = "";
+  historyNoteSelect.replaceChildren();
+
+  if (!snapshotId) {
+    historySummary.textContent = historyIssue
+      ? "Notebook history is unavailable."
+      : "History begins after changes to this notebook are saved.";
+    if (historyIssue) {
+      historyError.textContent = historyIssue.message;
+      historyError.hidden = false;
+    }
+    return;
+  }
+
+  try {
+    const documentAtTime = await storageService.loadSnapshot(snapshotId);
+    if (generation !== historyReadGeneration || !historyDialog.open) {
+      return;
+    }
+    selectedHistoryDocument = documentAtTime;
+    const fragment = document.createDocumentFragment();
+    for (const savedNote of documentAtTime.notes) {
+      const option = document.createElement("option");
+      option.value = savedNote.id;
+      option.textContent = displayNoteTitle(savedNote);
+      fragment.append(option);
+    }
+    historyNoteSelect.replaceChildren(fragment);
+    historyNoteSelect.value = documentAtTime.activeNoteId;
+    const snapshot = storageService.listSnapshots().find(
+      (item) => item.id === snapshotId,
+    );
+    const reason = snapshot?.kind === SNAPSHOT_KINDS.PRE_RESTORE
+      ? "Before a restore · "
+      : snapshot?.kind === SNAPSHOT_KINDS.BEFORE_DELETE
+        ? "Before a deletion · "
+        : "";
+    historySummary.textContent = `${pluralizedCount(documentAtTime.notes.length, "note", "notes")} · ${reason}${timestampFormatter.format(new Date(snapshot?.createdAt))}`;
+    setHistoryActionsEnabled(true);
+    renderHistoryPreview();
+  } catch (error) {
+    if (generation !== historyReadGeneration) {
+      return;
+    }
+    historySummary.textContent = "This restore point cannot be previewed.";
+    historyError.textContent = `History validation failed: ${error.message}`;
+    historyError.hidden = false;
+  }
+}
+
+function historyGroup(snapshot) {
+  if (snapshot.kind === "pre-restore") {
+    return "Before restores";
+  }
+  if (snapshot.kind === SNAPSHOT_KINDS.BEFORE_DELETE) {
+    return "Before deletions";
+  }
+  const age = Math.max(0, Date.now() - new Date(snapshot.createdAt).getTime());
+  if (age < 24 * 60 * 60 * 1000) {
+    return "Recent";
+  }
+  if (age < 31 * 24 * 60 * 60 * 1000) {
+    return "Daily";
+  }
+  return "Weekly";
+}
+
+async function openHistoryDialog(trigger) {
+  closeAllMenus();
+  historyReturnFocus = trigger;
+  historyError.hidden = true;
+  historyError.textContent = "";
+  historySnapshotSelect.replaceChildren();
+  selectedHistoryDocument = null;
+  setHistoryActionsEnabled(false);
+
+  let snapshots = [];
+  try {
+    snapshots = storageService.listSnapshots();
+  } catch (error) {
+    historyIssue = error;
+  }
+  const groups = new Map();
+  for (const snapshot of snapshots) {
+    const label = historyGroup(snapshot);
+    if (!groups.has(label)) {
+      const group = document.createElement("optgroup");
+      group.label = label;
+      groups.set(label, group);
+      historySnapshotSelect.append(group);
+    }
+    const option = document.createElement("option");
+    option.value = snapshot.id;
+    option.textContent = timestampFormatter.format(new Date(snapshot.createdAt));
+    groups.get(label).append(option);
+  }
+
+  historyDialog.showModal();
+  await loadSelectedHistorySnapshot();
+  historySnapshotSelect.focus();
+}
+
+function closeHistoryDialog() {
+  if (historyDialog.open) {
+    historyDialog.close();
+  }
+}
+
+historyDialogClose.addEventListener("click", closeHistoryDialog);
+historyCancel.addEventListener("click", closeHistoryDialog);
+historyDialog.addEventListener("close", () => {
+  historyReadGeneration += 1;
+  selectedHistoryDocument = null;
+  historyReturnFocus?.focus();
+  historyReturnFocus = null;
+});
+historySnapshotSelect.addEventListener("change", () => {
+  void loadSelectedHistorySnapshot();
+});
+historyNoteSelect.addEventListener("change", renderHistoryPreview);
+
+async function applyHistoryRestore(mode) {
+  if (!selectedHistoryDocument) {
+    return;
+  }
+  const historicalNote = selectedHistoryDocument.notes.find(
+    (item) => item.id === historyNoteSelect.value,
+  );
+  if (!historicalNote && mode !== "notebook") {
+    return;
+  }
+  if (
+    mode === "note" &&
+    notesDocument.notes.some((item) => item.id === historicalNote.id) &&
+    !window.confirm(`Replace the current “${displayNoteTitle(historicalNote)}” with this earlier version?`)
+  ) {
+    return;
+  }
+  if (
+    mode === "notebook" &&
+    !window.confirm("Restore this full notebook? JotKeep will first keep the current notebook as a recovery point.")
+  ) {
+    return;
+  }
+
+  const before = notesDocument;
+  setNotebookTransitionPending(true);
+  setHistoryActionsEnabled(false);
+  historyError.hidden = true;
+  await safetyCoordinator.suspend();
+  try {
+    if (!(await autosave.flush())) {
+      throw new Error("Current edits could not be saved before the restore.");
+    }
+    await safetyCoordinator.waitForIdle();
+    const candidate = mode === "notebook"
+      ? structuredClone(selectedHistoryDocument)
+      : restoreNoteFromSnapshot(
+          notesDocument,
+          selectedHistoryDocument,
+          historicalNote.id,
+          { asCopy: mode === "copy" },
+        );
+    await storageService.restoreNotebook(candidate, {
+      currentDocument: notesDocument,
+    });
+
+    clearRecoveryJournal();
+    textImportGeneration += 1;
+    notesDocument = candidate;
+    canSafelySave = true;
+    storageIssue = null;
+    historyIssue = null;
+    autosave.reset(SAVE_STATES.SAVED);
+    saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
+    searchInput.value = "";
+    renderNotes();
+    renderStorageStatus();
+    showActiveNote({ focus: "body" });
+    safetyCoordinator.markDirty();
+    safetyCoordinator.resume(candidate);
+    closeHistoryDialog();
+    setCommandFeedback(
+      mode === "copy"
+        ? `Restored “${displayNoteTitle(historicalNote)}” as a new copy.`
+        : mode === "note"
+          ? `Restored the earlier version of “${displayNoteTitle(historicalNote)}”.`
+          : `Restored the full notebook. The previous state remains in history.`,
+    );
+  } catch (error) {
+    notesDocument = before;
+    safetyCoordinator.resume(before);
+    historyError.textContent = `Restore failed: ${error.message}`;
+    historyError.hidden = false;
+    setHistoryActionsEnabled(selectedHistoryDocument !== null);
+  } finally {
+    setNotebookTransitionPending(false);
+  }
+}
+
+historyRestoreNote.addEventListener("click", () => void applyHistoryRestore("note"));
+historyRestoreCopy.addEventListener("click", () => void applyHistoryRestore("copy"));
+historyRestoreNotebook.addEventListener("click", () => void applyHistoryRestore("notebook"));
 
 function openClearDataDialog(trigger) {
   closeAllMenus();
@@ -1535,6 +1905,8 @@ clearDataConfirm.addEventListener("click", async () => {
   storageIssue = null;
   notesDocument = createNotesDocument();
   lastBackupMetadata = null;
+  externalBackupMetadata = null;
+  historyIssue = null;
   await safetyCoordinator.disconnect({ persist: false });
   searchInput.value = "";
   renderNotes();
@@ -1573,6 +1945,9 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
       case "verify-safety":
         await verifySafetyFile();
         break;
+      case "test-backup":
+        await testConnectedBackup();
+        break;
       case "grant-safety":
         if (await safetyCoordinator.grant(notesDocument)) {
           setCommandFeedback("Safety File access restored and the file was verified.");
@@ -1601,6 +1976,11 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
       case "restore-backup":
         restoreReturnFocus = button.closest("#file-menu") ? fileButton : moreButton;
         chooseFile(backupFileInput);
+        break;
+      case "browse-history":
+        await openHistoryDialog(
+          button.closest("#file-menu") ? fileButton : moreButton,
+        );
         break;
       case "persist-storage":
         await requestBrowserPersistence();
@@ -2090,6 +2470,7 @@ async function deleteSavedNote(noteId, trigger) {
   let deletingActiveNote;
   let deletingOnlyNote;
   let nextActiveNoteId;
+  let deleted = false;
   try {
     await autosave.flush();
     deletingActiveNote = noteId === notesDocument.activeNoteId;
@@ -2116,10 +2497,31 @@ async function deleteSavedNote(noteId, trigger) {
       }
     }
 
-    notesDocument = deleteNote(notesDocument, noteId, { nextActiveNoteId });
-    await persistImmediately();
+    const candidate = deleteNote(notesDocument, noteId, { nextActiveNoteId });
+    try {
+      await storageService.restoreNotebook(candidate, {
+        currentDocument: notesDocument,
+        checkpointKind: SNAPSHOT_KINDS.BEFORE_DELETE,
+      });
+    } catch (error) {
+      reportStorageIssue(error);
+      setCommandFeedback(
+        `Could not delete “${displayNoteTitle(savedNote)}” because a recovery checkpoint could not be saved.`,
+      );
+      return;
+    }
+    notesDocument = candidate;
+    deleted = true;
+    clearRecoveryJournal();
+    autosave.reset(SAVE_STATES.SAVED);
+    saveState.textContent = `Local: ${SAVE_STATES.SAVED}`;
+    safetyCoordinator.markDirty();
+    safetyCoordinator.localSaveSettled(candidate);
   } finally {
     setNotebookTransitionPending(false);
+  }
+  if (!deleted) {
+    return;
   }
   renderNotes();
 

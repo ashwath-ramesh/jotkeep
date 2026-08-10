@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "jotkeep-";
-const CACHE_VERSION = "jotkeep-v5";
+const CACHE_VERSION = "jotkeep-v6";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   "./src/notes.js",
   "./src/safety-file-format.js",
   "./src/safety-file.js",
+  "./src/snapshots.js",
   "./src/storage.js",
   "./fonts/newsreader-latin-400.woff2",
   "./fonts/newsreader-latin-600.woff2",

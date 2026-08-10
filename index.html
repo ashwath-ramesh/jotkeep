@@ -196,6 +196,9 @@
                 <button type="button" role="menuitem" data-file-action="verify-safety">
                   Verify Safety File…
                 </button>
+                <button type="button" role="menuitem" data-file-action="test-backup">
+                  Test my backup…
+                </button>
                 <button type="button" role="menuitem" data-file-action="grant-safety" hidden>
                   Grant Safety File access…
                 </button>
@@ -211,6 +214,9 @@
                 </button>
                 <button type="button" role="menuitem" data-file-action="restore-backup">
                   Restore JSON backup…
+                </button>
+                <button type="button" role="menuitem" data-file-action="browse-history">
+                  Browse history…
                 </button>
                 <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="persist-storage">
@@ -299,6 +305,9 @@
                 <button type="button" role="menuitem" data-file-action="verify-safety">
                   Verify Safety File…
                 </button>
+                <button type="button" role="menuitem" data-file-action="test-backup">
+                  Test my backup…
+                </button>
                 <button type="button" role="menuitem" data-file-action="grant-safety" hidden>
                   Grant Safety File access…
                 </button>
@@ -314,6 +323,9 @@
                 </button>
                 <button type="button" role="menuitem" data-file-action="restore-backup">
                   Restore JSON backup…
+                </button>
+                <button type="button" role="menuitem" data-file-action="browse-history">
+                  Browse history…
                 </button>
                 <button type="button" role="menuitem" data-file-action="persist-storage">
                   Keep data on this device
@@ -392,7 +404,7 @@
             Safety File: Checking…
           </span>
           <span id="command-feedback" role="status" aria-live="polite"></span>
-          <span id="backup-status">No JSON backup requested in this browser</span>
+          <span id="backup-status">No recoverable external backup verified</span>
           <span id="offline-status"></span>
           <button id="update-ready" class="update-ready-button" type="button" hidden>
             Update ready — refresh
@@ -420,6 +432,12 @@
       id="safety-file-input"
       type="file"
       accept=".jotkeep,application/json"
+      hidden
+    />
+    <input
+      id="backup-test-file-input"
+      type="file"
+      accept=".jotkeep,.json,application/json"
       hidden
     />
 
@@ -534,6 +552,45 @@
     </dialog>
 
     <dialog
+      id="history-dialog"
+      class="app-dialog history-dialog"
+      aria-labelledby="history-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="history-dialog-title">Notebook history</h2>
+        <button
+          id="history-dialog-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Close notebook history"
+        >×</button>
+      </div>
+      <div class="dialog-content history-content">
+        <div class="history-choices">
+          <label for="history-snapshot">Restore point</label>
+          <select id="history-snapshot"></select>
+          <label for="history-note">Note to preview</label>
+          <select id="history-note"></select>
+          <p id="history-summary" class="dialog-status"></p>
+          <p id="history-error" class="dialog-error" role="alert" hidden></p>
+        </div>
+        <section class="history-preview" aria-label="Earlier note preview">
+          <div id="history-preview-title" class="history-preview-title"></div>
+          <textarea id="history-preview-body" readonly aria-label="Earlier note content"></textarea>
+        </section>
+      </div>
+      <div class="dialog-actions history-actions">
+        <button id="history-restore-note" type="button">Restore note</button>
+        <button id="history-restore-copy" type="button">Restore a copy</button>
+        <span class="dialog-action-spacer"></span>
+        <button id="history-cancel" type="button">Cancel</button>
+        <button id="history-restore-notebook" class="danger-confirm-button" type="button">
+          Restore full notebook
+        </button>
+      </div>
+    </dialog>
+
+    <dialog
       id="clear-data-dialog"
       class="app-dialog"
       aria-labelledby="clear-data-dialog-title"
@@ -552,9 +609,9 @@
       <div class="dialog-content">
         <p id="clear-data-summary" class="dialog-copy"></p>
         <p class="dialog-copy">
-          This removes JotKeep notes, preferences, and backup status from this
-          browser, including its Safety File connection. External Safety Files
-          and downloaded text or JSON files are not affected.
+          This removes JotKeep notes, history, preferences, and backup status
+          from this browser, including its Safety File connection. External
+          Safety Files and downloaded text or JSON files are not affected.
         </p>
         <p id="clear-data-error" class="dialog-error" role="alert" hidden></p>
       </div>

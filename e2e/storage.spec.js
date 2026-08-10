@@ -49,7 +49,7 @@ function documentFixture() {
 async function readStorage(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open("jotkeep", 1);
+      const request = indexedDB.open("jotkeep");
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -109,7 +109,7 @@ test("migrates the version-2 document into individual verified records", async (
   expect(stored.metadata.preferences).toEqual(source.preferences);
   expect(stored.backup).toEqual({ key: "lastBackup", ...backupMetadata });
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup requested",
+    "No recoverable external backup verified",
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
   expect(
@@ -259,7 +259,7 @@ test("preserves backup status when the blank notebook has never been saved", asy
   await page.getByRole("menuitem", { name: "Export JSON backup…" }).click();
   await downloadPromise;
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup requested",
+    "No recoverable external backup verified",
   );
 
   const stored = await readStorage(page);
@@ -268,7 +268,7 @@ test("preserves backup status when the blank notebook has never been saved", asy
 
   await page.reload();
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup requested",
+    "No recoverable external backup verified",
   );
 });
 

@@ -9,6 +9,14 @@ import {
   readSafetyFileHandle,
   writeSafetyFile,
 } from "../src/safety-file.js";
+import {
+  LEGACY_SAFETY_FILE_VERSION,
+  SAFETY_FILE_FORMAT,
+} from "../src/safety-file-format.js";
+import {
+  createSnapshot,
+  emptyHistoryArchive,
+} from "../src/snapshots.js";
 
 const CREATED_AT = "2026-08-09T12:00:00.000Z";
 const cryptoObject = globalThis.crypto ?? webcrypto;
@@ -25,6 +33,19 @@ function documentFixture(content = "One") {
       updatedAt: CREATED_AT,
     }],
     preferences: { sortBy: "updatedAt", listView: "detailed" },
+  };
+}
+
+async function historyFixture(document = documentFixture()) {
+  const created = await createSnapshot(document, {
+    now: () => new Date(CREATED_AT),
+    idFactory: () => "snapshot_one",
+    cryptoObject,
+  });
+  return {
+    ...emptyHistoryArchive(),
+    snapshots: [created.snapshot],
+    noteRevisions: created.noteRevisions,
   };
 }
 
@@ -135,6 +156,33 @@ test("a changed baseline blocks an automatic overwrite", async () => {
   );
 });
 
+test("corrupt local history is rejected before a valid Safety File is opened for writing", async () => {
+  const handle = memoryHandle();
+  const first = await writeSafetyFile(handle, documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  const before = handle.getText();
+  const corruptHistory = await historyFixture();
+  corruptHistory.noteRevisions[0].note.content = "Changed without a new hash";
+
+  await assert.rejects(
+    () => writeSafetyFile(handle, documentFixture("Two"), {
+      history: corruptHistory,
+      expectedDigest: first.digest,
+      cryptoObject,
+    }),
+    (error) =>
+      error.kind === SAFETY_FILE_FAILURES.VERIFY &&
+      /was not changed/u.test(error.message),
+  );
+  assert.equal(handle.getText(), before);
+  assert.equal(
+    (await readSafetyFileHandle(handle, { cryptoObject })).value.document.notes[0].content,
+    "One",
+  );
+});
+
 test("coordinator waits for local-save settlement and verifies every backup", async () => {
   const states = [];
   const savedConnections = [];
@@ -164,6 +212,42 @@ test("coordinator waits for local-save settlement and verifies every backup", as
   assert.equal(coordinator.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
   assert.ok(savedConnections.length >= 2);
   assert.ok(states.includes(SAFETY_FILE_STATES.WRITING));
+});
+
+test("reload verification synchronizes history even when the notebook already matches", async () => {
+  let persistedConnection = null;
+  let localHistory = emptyHistoryArchive();
+  const storageService = {
+    async saveSafetyFileConnection(value) {
+      persistedConnection = value;
+    },
+    async disconnectSafetyFile() {},
+  };
+  const handle = memoryHandle();
+  const original = createSafetyFileCoordinator({
+    storageService,
+    directSupported: true,
+    historyProvider: () => localHistory,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await original.create(handle, documentFixture());
+  assert.equal(JSON.parse(handle.getText()).history.snapshots.length, 0);
+
+  localHistory = await historyFixture();
+  const reloaded = createSafetyFileCoordinator({
+    storageService,
+    initialConnection: persistedConnection,
+    directSupported: true,
+    historyProvider: () => localHistory,
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  await reloaded.initialize(documentFixture());
+  await reloaded.waitForIdle();
+
+  assert.equal(reloaded.getState().kind, SAFETY_FILE_STATES.BACKED_UP);
+  assert.equal(JSON.parse(handle.getText()).history.snapshots.length, 1);
 });
 
 test("permission loss and external edits pause automatic updates without changing local data", async () => {
@@ -588,4 +672,32 @@ test("written Safety Files embed a checksum and corrupted notes are rejected", a
     () => readSafetyFileHandle(handle, { cryptoObject }),
     (error) => /checksum/u.test(error.message),
   );
+});
+
+test("version 2 requires a checksum while checksum-less version 1 remains readable", async () => {
+  const handle = memoryHandle();
+  await writeSafetyFile(handle, documentFixture(), {
+    now: () => new Date(CREATED_AT),
+    cryptoObject,
+  });
+  const versionTwo = JSON.parse(handle.getText());
+  delete versionTwo.checksum;
+  handle.setText(`${JSON.stringify(versionTwo, null, 2)}\n`);
+  await assert.rejects(
+    () => readSafetyFileHandle(handle, { cryptoObject }),
+    (error) => /missing its required checksum/u.test(error.message),
+  );
+
+  handle.setText(`${JSON.stringify({
+    format: SAFETY_FILE_FORMAT,
+    version: LEGACY_SAFETY_FILE_VERSION,
+    fileId: "legacy-file",
+    revisionId: "legacy-revision",
+    createdAt: CREATED_AT,
+    updatedAt: CREATED_AT,
+    document: documentFixture(),
+  }, null, 2)}\n`);
+  const legacy = await readSafetyFileHandle(handle, { cryptoObject });
+  assert.equal(legacy.value.version, LEGACY_SAFETY_FILE_VERSION);
+  assert.equal(legacy.value.document.notes[0].content, "One");
 });

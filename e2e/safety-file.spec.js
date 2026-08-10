@@ -26,7 +26,9 @@ test("manual fallback downloads and restores a complete Safety File", async ({ p
 
   await page.locator("#note-title").fill("Portable");
   await page.locator("#note").fill("Unicode ☕\nSecond line");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   await page.locator("#note-list-view").selectOption("compact");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
 
   const downloadPromise = page.waitForEvent("download");
   await (await openFileAction(page, "Download Safety File…")).click();
@@ -34,7 +36,9 @@ test("manual fallback downloads and restores a complete Safety File", async ({ p
   const bytes = await downloadBytes(download);
   const value = JSON.parse(bytes.toString("utf8"));
   expect(value.format).toBe("jotkeep-safety-file");
-  expect(value.version).toBe(1);
+  expect(value.version).toBe(2);
+  expect(value.history.format).toBe("jotkeep-history");
+  expect(value.history.snapshots.length).toBeGreaterThan(0);
   expect(value.document.notes[0].content).toBe("Unicode ☕\nSecond line");
   expect(value.document.preferences.listView).toBe("compact");
 
@@ -116,12 +120,19 @@ test("connected files update after local autosave and pause on external changes"
     await page.evaluate(() => JSON.parse(window.__safetyText).document.notes[0].content),
   ).toBe("Local change after conflict");
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const value = JSON.parse(window.__safetyText);
     value.document.notes[0].content = "External copy wins";
-    // An external writer that does not produce checksums; a stale embedded
-    // checksum would (correctly) be rejected as possible corruption.
-    delete value.checksum;
+    const checksumBytes = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(JSON.stringify({
+        document: value.document,
+        history: value.history,
+      })),
+    );
+    value.checksum = Array.from(new Uint8Array(checksumBytes), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
     window.__safetyText = `${JSON.stringify(value, null, 2)}\n`;
   });
   await page.locator("#note").fill("Local copy loses after confirmation");

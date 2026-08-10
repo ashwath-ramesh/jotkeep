@@ -4,13 +4,15 @@ JotKeep is a privacy-first, plain-text notepad that runs in the browser. It
 needs no installation and no account. Notes stay usable, portable, and
 recoverable without JotKeep. Each notebook can have a user-owned **Safety
 File**: a notebook file that JotKeep updates automatically and keeps outside
-browser storage. Version history and optional encryption for the Safety File
-are on the roadmap.
+browser storage. Version history provides recovery depth; optional Safety
+File encryption remains on the roadmap.
 
 The core promise:
 
 > No sign-up, no lock-in, and no silent data loss when browser storage is
 > cleared — if the user has connected or downloaded a Safety File.
+
+For user instructions, read the [JotKeep User Guide](USER_GUIDE.md).
 
 ## Contents
 
@@ -19,7 +21,8 @@ The core promise:
   - [Tests](#tests)
 - [Backup and recovery](#backup-and-recovery)
 - [Safety Files](#safety-files)
-  - [`.jotkeep` format version 1](#jotkeep-format-version-1)
+  - [`.jotkeep` format version 2](#jotkeep-format-version-2)
+- [Notebook history and retention](#notebook-history-and-retention)
 - [Browser storage durability](#browser-storage-durability)
 - [Offline, installation, and theming](#offline-installation-and-theming)
 - [Feature roadmap](#feature-roadmap)
@@ -109,10 +112,13 @@ preference. Keep the file outside the browser.
 
 **Restore JSON backup** validates the full file before it changes anything.
 Merge adds copies of all backup notes and keeps the current active note and
-preferences. Replace replaces the current notebook and preferences. The date
-in the status bar shows when this browser last created a JSON backup. It does
-not show that the file still exists. When the user clears JotKeep data, files
-that were already downloaded stay on disk.
+preferences. Replace replaces the current notebook and preferences. Use
+**Test my backup…** to validate a JSON backup or Safety File without changing
+the open notebook. The status bar shows the age of the most recently verified
+external copy and warns after seven days. A successful test proves that the
+selected file is recoverable at that moment; a browser cannot prove that a
+download still exists later. When the user clears JotKeep data, files that
+were already downloaded stay on disk.
 
 Single `.txt` files are a plain-text escape route. An opened `.txt` file
 becomes a new note. A downloaded note contains only the note body, without
@@ -145,15 +151,16 @@ download. JotKeep cannot update a downloaded file automatically and cannot
 prove that it stays on disk. The interface says this before the user relies
 on it.
 
-### `.jotkeep` format version 1
+### `.jotkeep` format version 2
 
-A Safety File is UTF-8 JSON with a 25 MiB limit. The format envelope has its
-own version, separate from the embedded application document:
+A Safety File is UTF-8 JSON. Version 2 carries the current notebook plus its
+space-efficient history. The format envelope has its own version, separate
+from both the embedded application document and snapshot format:
 
 ```json
 {
   "format": "jotkeep-safety-file",
-  "version": 1,
+  "version": 2,
   "fileId": "stable-file-id",
   "revisionId": "new-id-for-each-write",
   "createdAt": "2026-08-09T12:00:00.000Z",
@@ -174,15 +181,55 @@ own version, separate from the embedded application document:
       "sortBy": "updatedAt",
       "listView": "detailed"
     }
-  }
+  },
+  "history": {
+    "format": "jotkeep-history",
+    "version": 1,
+    "snapshots": [],
+    "noteRevisions": []
+  },
+  "checksum": "sha256-of-document-and-history"
 }
 ```
 
 `fileId` and `createdAt` stay stable for the life of a connected file.
 `revisionId` and `updatedAt` change on each verified write. Each note keeps
-its own `createdAt` and `updatedAt` timestamps. JotKeep rejects unknown or
-incompatible format versions and imports nothing. The format is unencrypted
-in Phase 6. Optional encryption is a future envelope with its own version.
+its own `createdAt` and `updatedAt` timestamps. Version 2 requires the checksum,
+which detects accidental corruption of the notebook or history; it is not an
+authentication mechanism. JotKeep rejects unknown or incompatible format
+versions and imports nothing. Version 1 Safety Files remain readable without a
+checksum and open with empty history. The format is unencrypted. Optional
+encryption is a future envelope with its own version.
+
+The current notebook is limited to 25 MiB, snapshot history to 25 MiB, and a
+version 2 Safety File to 50 MiB including formatting and metadata. A legacy
+version 1 Safety File retains its 25 MiB total limit.
+
+## Notebook history and retention
+
+JotKeep keeps notebook restore points in IndexedDB and includes them in
+version 2 Safety Files. A restore point stores a manifest of content-addressed
+note revisions, so unchanged notes are shared instead of copied for every
+checkpoint. JotKeep creates at most one automatic restore point per UTC hour.
+It also creates a protected checkpoint immediately before a restore or note
+deletion. Use **File → Browse history…** to preview an earlier note, replace
+only that note, recover it as a new copy, or restore the full notebook.
+
+Retention is deterministic and uses UTC boundaries:
+
+- one restore point per hour for the most recent 24 hours;
+- one per day for the following 30 days;
+- one per ISO week for the following 12 weeks;
+- every pre-restore and pre-delete checkpoint from the most recent 24 hours.
+
+History is capped at 25 MiB. When the cap is reached, JotKeep removes the
+oldest weekly, then daily, then hourly checkpoints, followed by older event
+checkpoints only if necessary. It garbage-collects note revisions that no
+retained checkpoint references. The checkpoint made for an in-progress
+restore is protected from that pruning pass. If even the protected checkpoint
+cannot fit, the restore is rejected and the current notebook is left
+unchanged. Local history improves recovery but is still browser data, so it
+does not count as an external backup.
 
 ## Browser storage durability
 
@@ -342,13 +389,13 @@ Acceptance criteria:
 
 ### Phase 7 — Time Machine and recovery
 
-- [ ] Store space-efficient recent, daily, and weekly notebook snapshots
-- [ ] Let the user preview an earlier note before a restore
-- [ ] Restore one note, a copy of one note, or the full notebook
-- [ ] Keep the current state as a snapshot before each restore
-- [ ] Add a **Test my backup** action that does a non-destructive validation
-- [ ] Show the backup age and warn when no recoverable external copy exists
-- [ ] Apply documented retention and size limits
+- [x] Store space-efficient recent, daily, and weekly notebook snapshots
+- [x] Let the user preview an earlier note before a restore
+- [x] Restore one note, a copy of one note, or the full notebook
+- [x] Keep the current state as a snapshot before each restore
+- [x] Add a **Test my backup** action that does a non-destructive validation
+- [x] Show the backup age and warn when no recoverable external copy exists
+- [x] Apply documented retention and size limits
 
 Acceptance criteria:
 
@@ -485,9 +532,11 @@ notebook encryption keys stay separate concepts.
 ## Current data model
 
 The version 2 document is the canonical shape for the application and the
-JSON backup. IndexedDB stores each note as one record. Metadata records keep
-the active-note selection, preferences, note order, and backup status. The
-old version 2 `localStorage` document is only a migration source.
+JSON backup. IndexedDB stores each note as one record, each snapshot as one
+manifest, and each distinct historical note revision as one content-addressed
+record. Metadata records keep the active-note selection, preferences, note
+order, backup status, and verified-external-copy status. The old version 2
+`localStorage` document is only a migration source.
 
 ```json
 {
@@ -554,6 +603,7 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 │   ├── notes.js           # note operations, filtering, and sorting
 │   ├── safety-file-format.js # .jotkeep schema and validation
 │   ├── safety-file.js     # file access, verification, sync, and conflicts
+│   ├── snapshots.js       # deduplicated history, checksums, and retention
 │   ├── storage.js         # document validation and legacy format helpers
 │   └── styles.css
 ├── tests/
@@ -565,10 +615,12 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 │   ├── notes.test.js
 │   ├── safety-file-format.test.js
 │   ├── safety-file.test.js
+│   ├── snapshots.test.js
 │   ├── storage.test.js
 │   └── sw.test.js
 └── e2e/
     ├── backup.spec.js
+    ├── history.spec.js
     ├── offline.spec.js
     ├── safety-file.spec.js
     └── storage.spec.js

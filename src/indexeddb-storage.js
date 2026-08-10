@@ -9,17 +9,33 @@ import {
   isValidDocument,
   isValidNotesDocument,
 } from "./storage.js";
+import {
+  SNAPSHOT_KINDS,
+  SnapshotValidationError,
+  createSnapshot,
+  emptyHistoryArchive,
+  hasAutomaticSnapshotInUtcHour,
+  mergeHistoryArchives,
+  pruneHistory,
+  reconstructSnapshot,
+  validateHistoryArchive,
+  verifyHistoryArchive,
+} from "./snapshots.js";
 
 export const DATABASE_NAME = "jotkeep";
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2;
 export const NOTES_STORE = "notes";
 export const METADATA_STORE = "metadata";
+export const SNAPSHOTS_STORE = "snapshots";
+export const SNAPSHOT_NOTES_STORE = "snapshotNotes";
 
 const NOTEBOOK_METADATA_KEY = "notebook";
 const BACKUP_METADATA_KEY = "lastBackup";
 const SAFETY_FILE_METADATA_KEY = "safetyFile";
+const EXTERNAL_BACKUP_METADATA_KEY = "externalBackup";
 const STORAGE_SCHEMA_VERSION = 1;
 const SAFETY_FILE_CONNECTION_VERSION = 1;
+const EXTERNAL_BACKUP_VERSION = 1;
 
 export const STORAGE_FAILURES = Object.freeze({
   QUOTA: "quota",
@@ -132,6 +148,23 @@ function safetyFileConnectionRecord(connection) {
   return { key: SAFETY_FILE_METADATA_KEY, ...clone(connection) };
 }
 
+function validExternalBackup(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    value.version === EXTERNAL_BACKUP_VERSION &&
+    ["safety-file", "json-backup"].includes(value.kind) &&
+    typeof value.identity === "string" &&
+    value.identity !== "" &&
+    isIsoTimestamp(value.contentAt) &&
+    isIsoTimestamp(value.verifiedAt)
+  );
+}
+
+function externalBackupRecord(value) {
+  return { key: EXTERNAL_BACKUP_METADATA_KEY, ...clone(value) };
+}
+
 function documentFromRecords(notes, metadata) {
   if (
     metadata === undefined ||
@@ -194,6 +227,41 @@ async function readDocumentFromTransaction(transaction) {
   }
 
   return document;
+}
+
+function historyFromRecords(snapshots, noteRevisions) {
+  const archive = {
+    format: "jotkeep-history",
+    version: 1,
+    snapshots,
+    noteRevisions,
+  };
+  validateHistoryArchive(archive);
+  return archive;
+}
+
+async function readHistoryFromTransaction(transaction) {
+  const snapshotsRequest = transaction.objectStore(SNAPSHOTS_STORE).getAll();
+  const revisionsRequest = transaction.objectStore(SNAPSHOT_NOTES_STORE).getAll();
+  const [snapshots, noteRevisions] = await Promise.all([
+    requestResult(snapshotsRequest),
+    requestResult(revisionsRequest),
+  ]);
+  return historyFromRecords(snapshots, noteRevisions);
+}
+
+function writeHistoryToTransaction(transaction, archive) {
+  validateHistoryArchive(archive);
+  const snapshots = transaction.objectStore(SNAPSHOTS_STORE);
+  const revisions = transaction.objectStore(SNAPSHOT_NOTES_STORE);
+  snapshots.clear();
+  revisions.clear();
+  for (const snapshot of archive.snapshots) {
+    snapshots.put(clone(snapshot));
+  }
+  for (const revision of archive.noteRevisions) {
+    revisions.put(clone(revision));
+  }
 }
 
 function assertCurrentDocument(current, expectedDocuments) {
@@ -285,6 +353,12 @@ function openDatabase(indexedDBObject) {
       if (!database.objectStoreNames.contains(METADATA_STORE)) {
         database.createObjectStore(METADATA_STORE, { keyPath: "key" });
       }
+      if (!database.objectStoreNames.contains(SNAPSHOTS_STORE)) {
+        database.createObjectStore(SNAPSHOTS_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains(SNAPSHOT_NOTES_STORE)) {
+        database.createObjectStore(SNAPSHOT_NOTES_STORE, { keyPath: "revisionId" });
+      }
     });
     request.addEventListener("success", () => {
       if (settled) {
@@ -317,7 +391,7 @@ function openDatabase(indexedDBObject) {
 async function readDatabase(database) {
   return runTransaction(
     database,
-    [NOTES_STORE, METADATA_STORE],
+    [NOTES_STORE, METADATA_STORE, SNAPSHOTS_STORE, SNAPSHOT_NOTES_STORE],
     "readonly",
     async (transaction) => {
       const notesRequest = transaction.objectStore(NOTES_STORE).getAll();
@@ -330,11 +404,27 @@ async function readDatabase(database) {
       const safetyFileRequest = transaction
         .objectStore(METADATA_STORE)
         .get(SAFETY_FILE_METADATA_KEY);
-      const [notes, notebook, backupRecord, safetyFileRecord] = await Promise.all([
+      const externalBackupRequest = transaction
+        .objectStore(METADATA_STORE)
+        .get(EXTERNAL_BACKUP_METADATA_KEY);
+      const snapshotsRequest = transaction.objectStore(SNAPSHOTS_STORE).getAll();
+      const revisionsRequest = transaction.objectStore(SNAPSHOT_NOTES_STORE).getAll();
+      const [
+        notes,
+        notebook,
+        backupRecord,
+        safetyFileRecord,
+        externalBackupRecordValue,
+        snapshots,
+        noteRevisions,
+      ] = await Promise.all([
         requestResult(notesRequest),
         requestResult(notebookRequest),
         requestResult(backupRequest),
         requestResult(safetyFileRequest),
+        requestResult(externalBackupRequest),
+        requestResult(snapshotsRequest),
+        requestResult(revisionsRequest),
       ]);
       const document = documentFromRecords(notes, notebook);
       let backup = backupRecord
@@ -366,10 +456,32 @@ async function readDatabase(database) {
             verifiedAt: safetyFileRecord.verifiedAt,
           }
         : null;
+      const externalBackup = externalBackupRecordValue
+        ? {
+            version: externalBackupRecordValue.version,
+            kind: externalBackupRecordValue.kind,
+            identity: externalBackupRecordValue.identity,
+            contentAt: externalBackupRecordValue.contentAt,
+            verifiedAt: externalBackupRecordValue.verifiedAt,
+          }
+        : null;
+
+      let history = emptyHistoryArchive();
+      let historyError = null;
+      try {
+        history = historyFromRecords(snapshots, noteRevisions);
+      } catch (error) {
+        historyError = error instanceof SnapshotValidationError
+          ? error
+          : new SnapshotValidationError("Stored snapshot history is unavailable.");
+      }
 
       return {
         document,
         backup,
+        history,
+        historyError,
+        externalBackup: validExternalBackup(externalBackup) ? externalBackup : null,
         safetyFileConnection: validSafetyFileConnection(safetyFileConnection)
           ? safetyFileConnection
           : null,
@@ -412,11 +524,15 @@ async function writeDocument(
   database,
   previous,
   next,
-  { replace = false, force = false } = {},
+  { replace = false, force = false, historyArchive = null } = {},
 ) {
+  const stores = [NOTES_STORE, METADATA_STORE];
+  if (historyArchive !== null) {
+    stores.push(SNAPSHOTS_STORE, SNAPSHOT_NOTES_STORE);
+  }
   await runTransaction(
     database,
-    [NOTES_STORE, METADATA_STORE],
+    stores,
     "readwrite",
     async (transaction) => {
       const notes = transaction.objectStore(NOTES_STORE);
@@ -444,6 +560,9 @@ async function writeDocument(
       }
       if (writeMetadata) {
         metadata.put(notebookMetadata(next));
+      }
+      if (historyArchive !== null) {
+        writeHistoryToTransaction(transaction, historyArchive);
       }
     },
   );
@@ -621,10 +740,15 @@ export function createBrowserStorageService({
   localStorageObject = getLocalStorage(),
   navigatorStorage = globalThis.navigator?.storage,
   migrationOptions = {},
+  now = () => new Date(),
+  cryptoObject = globalThis.crypto,
 } = {}) {
   let database = null;
   let persistedDocument = null;
+  let persistedHistory = emptyHistoryArchive();
+  let historyIssue = null;
   let lastBackupMetadata = null;
+  let externalBackupMetadata = null;
   let initializationError = null;
   let writeProtected = false;
   let pendingLegacyCleanupKeys = [];
@@ -692,7 +816,10 @@ export function createBrowserStorageService({
       const existing = await readDatabase(database);
       if (existing.document !== null) {
         persistedDocument = clone(existing.document);
+        persistedHistory = clone(existing.history);
+        historyIssue = existing.historyError;
         lastBackupMetadata = clone(existing.backup);
+        externalBackupMetadata = clone(existing.externalBackup);
         writeProtected = false;
         initializationError = null;
         // Legacy localStorage data is only deleted when it matches the
@@ -720,6 +847,9 @@ export function createBrowserStorageService({
           documentGenerated: false,
           lastBackupMetadata: clone(existing.backup),
           safetyFileConnection: clone(existing.safetyFileConnection),
+          history: clone(persistedHistory),
+          historyError: historyIssue,
+          externalBackupMetadata: clone(externalBackupMetadata),
           storageAvailable: initializationError === null,
           canSafelySave: true,
           migrated: false,
@@ -736,6 +866,9 @@ export function createBrowserStorageService({
           documentGenerated: true,
           lastBackupMetadata: null,
           safetyFileConnection: null,
+          history: clone(persistedHistory),
+          historyError: historyIssue,
+          externalBackupMetadata: clone(externalBackupMetadata),
           storageAvailable: true,
           canSafelySave: false,
           migrated: false,
@@ -765,6 +898,9 @@ export function createBrowserStorageService({
             documentGenerated: false,
             lastBackupMetadata: clone(legacy.backup),
             safetyFileConnection: null,
+            history: clone(persistedHistory),
+            historyError: historyIssue,
+            externalBackupMetadata: clone(externalBackupMetadata),
             storageAvailable: true,
             canSafelySave: true,
             migrated: true,
@@ -784,6 +920,9 @@ export function createBrowserStorageService({
             documentGenerated: false,
             lastBackupMetadata: clone(legacy.backup),
             safetyFileConnection: null,
+            history: clone(persistedHistory),
+            historyError: historyIssue,
+            externalBackupMetadata: clone(externalBackupMetadata),
             storageAvailable: false,
             canSafelySave: true,
             migrated: false,
@@ -796,6 +935,7 @@ export function createBrowserStorageService({
       persistedDocument = null;
       const backupMetadata = existing.backup ?? legacy.backup;
       lastBackupMetadata = clone(backupMetadata);
+      externalBackupMetadata = clone(existing.externalBackup);
       if (existing.backup === null && legacy.backup !== null) {
         await runTransaction(database, METADATA_STORE, "readwrite", (transaction) => {
           transaction
@@ -820,6 +960,9 @@ export function createBrowserStorageService({
         documentGenerated: true,
         lastBackupMetadata: clone(backupMetadata),
         safetyFileConnection: clone(existing.safetyFileConnection),
+        history: clone(persistedHistory),
+        historyError: historyIssue,
+        externalBackupMetadata: clone(externalBackupMetadata),
         storageAvailable: true,
         canSafelySave: true,
         migrated: false,
@@ -837,6 +980,9 @@ export function createBrowserStorageService({
         documentGenerated: legacy.document === null,
         lastBackupMetadata: clone(legacy.backup),
         safetyFileConnection: null,
+        history: clone(persistedHistory),
+        historyError: historyIssue,
+        externalBackupMetadata: clone(externalBackupMetadata),
         storageAvailable: false,
         canSafelySave:
           initializationError.kind !== STORAGE_FAILURES.MIGRATION &&
@@ -863,12 +1009,53 @@ export function createBrowserStorageService({
     }
   }
 
+  async function automaticHistoryFor(nextDocument) {
+    if (
+      historyIssue ||
+      persistedDocument === null ||
+      documentsEqual(persistedDocument, nextDocument)
+    ) {
+      return { archive: null, error: historyIssue };
+    }
+    const date = typeof now === "function" ? now() : now;
+    if (hasAutomaticSnapshotInUtcHour(persistedHistory.snapshots, date)) {
+      return { archive: null, error: null };
+    }
+    try {
+      const created = await createSnapshot(persistedDocument, {
+        kind: SNAPSHOT_KINDS.AUTOMATIC,
+        now: date,
+        cryptoObject,
+      });
+      const merged = mergeHistoryArchives(persistedHistory, {
+        ...emptyHistoryArchive(),
+        snapshots: [created.snapshot],
+        noteRevisions: created.noteRevisions,
+      });
+      const pruned = pruneHistory(merged, { now: date });
+      if (!pruned.fits) {
+        return {
+          archive: null,
+          error: new StorageFailure(
+            STORAGE_FAILURES.QUOTA,
+            "The notebook was saved, but its automatic history checkpoint is too large.",
+          ),
+        };
+      }
+      return { archive: pruned.archive, error: null };
+    } catch (error) {
+      return { archive: null, error };
+    }
+  }
+
   async function saveNotebook(document) {
     if (!isValidNotesDocument(document)) {
       throw new TypeError("Cannot save an invalid notes document.");
     }
     requireDatabase();
 
+    const automaticHistory = await automaticHistoryFor(document);
+    let snapshotError = automaticHistory.error;
     try {
       if (
         persistedDocument === null &&
@@ -882,7 +1069,30 @@ export function createBrowserStorageService({
         );
         await verifyLegacyMigration(document, lastBackupMetadata);
       } else {
-        await writeDocument(database, persistedDocument, document);
+        try {
+          await writeDocument(database, persistedDocument, document, {
+            historyArchive: automaticHistory.archive,
+          });
+          if (automaticHistory.archive !== null) {
+            persistedHistory = clone(automaticHistory.archive);
+          }
+        } catch (error) {
+          const classified = classifiedFailure(error);
+          if (
+            automaticHistory.archive === null ||
+            classified.kind !== STORAGE_FAILURES.QUOTA
+          ) {
+            throw classified;
+          }
+          // History is best-effort during normal editing. A quota failure must
+          // not prevent the current notebook from being saved.
+          await writeDocument(database, persistedDocument, document);
+          snapshotError = new StorageFailure(
+            STORAGE_FAILURES.QUOTA,
+            "The notebook was saved, but browser storage could not keep its automatic history checkpoint.",
+            { cause: classified },
+          );
+        }
       }
       persistedDocument = clone(document);
       if (pendingLegacyCleanupKeys.length !== 0) {
@@ -890,6 +1100,7 @@ export function createBrowserStorageService({
         finishLegacyCleanup();
       }
       initializationError = null;
+      return { snapshotSaved: snapshotError === null, snapshotError };
     } catch (error) {
       throw classifiedFailure(error);
     }
@@ -925,6 +1136,133 @@ export function createBrowserStorageService({
     }
   }
 
+  async function restoreNotebook(
+    document,
+    {
+      currentDocument = persistedDocument,
+      importedHistory = null,
+      checkpointKind = SNAPSHOT_KINDS.PRE_RESTORE,
+    } = {},
+  ) {
+    if (!isValidNotesDocument(document) || !isValidNotesDocument(currentDocument)) {
+      throw new TypeError("Cannot restore an invalid notes document.");
+    }
+    if (!database) {
+      requireDatabase();
+    }
+    if (historyIssue) {
+      throw new StorageFailure(
+        STORAGE_FAILURES.MIGRATION,
+        "Stored history is damaged, so JotKeep cannot create a safe pre-restore checkpoint.",
+        { cause: historyIssue },
+      );
+    }
+
+    try {
+      if (importedHistory !== null) {
+        await verifyHistoryArchive(importedHistory, { cryptoObject });
+      }
+      const date = typeof now === "function" ? now() : now;
+      const created = await createSnapshot(currentDocument, {
+        kind: checkpointKind,
+        now: date,
+        cryptoObject,
+      });
+      const checkpointArchive = {
+        ...emptyHistoryArchive(),
+        snapshots: [created.snapshot],
+        noteRevisions: created.noteRevisions,
+      };
+      const combined = mergeHistoryArchives(
+        persistedHistory,
+        importedHistory,
+        checkpointArchive,
+      );
+      const pruned = pruneHistory(combined, {
+        now: date,
+        protectedSnapshotId: created.snapshot.id,
+      });
+      if (!pruned.fits) {
+        throw new StorageFailure(
+          STORAGE_FAILURES.QUOTA,
+          "The current notebook is too large to keep the required pre-restore checkpoint. No notes were changed.",
+        );
+      }
+
+      await writeDocument(database, persistedDocument, document, {
+        replace: true,
+        force: writeProtected,
+        historyArchive: pruned.archive,
+      });
+      const stored = await readDatabase(database);
+      if (!documentsEqual(stored.document, document) || stored.historyError) {
+        throw new StorageFailure(
+          STORAGE_FAILURES.MIGRATION,
+          "The restored notebook and its recovery checkpoint could not be verified.",
+        );
+      }
+      const storedCheckpoint = stored.history.snapshots.find(
+        (snapshot) => snapshot.id === created.snapshot.id,
+      );
+      if (!storedCheckpoint) {
+        throw new StorageFailure(
+          STORAGE_FAILURES.MIGRATION,
+          "The required pre-restore checkpoint was not retained.",
+        );
+      }
+      await reconstructSnapshot(storedCheckpoint, stored.history.noteRevisions, {
+        cryptoObject,
+      });
+
+      removeLegacyKeys(localStorageObject, JOTKEEP_STORAGE_KEYS);
+      pendingLegacyCleanupKeys = [];
+      persistedDocument = clone(document);
+      persistedHistory = clone(stored.history);
+      historyIssue = null;
+      writeProtected = false;
+      initializationError = null;
+      return {
+        checkpointId: created.snapshot.id,
+        history: clone(persistedHistory),
+      };
+    } catch (error) {
+      throw classifiedFailure(error);
+    }
+  }
+
+  async function loadSnapshot(snapshotId) {
+    if (historyIssue) {
+      throw historyIssue;
+    }
+    const snapshot = persistedHistory.snapshots.find((item) => item.id === snapshotId);
+    if (!snapshot) {
+      throw new SnapshotValidationError("The selected history checkpoint no longer exists.");
+    }
+    return reconstructSnapshot(snapshot, persistedHistory.noteRevisions, {
+      cryptoObject,
+    });
+  }
+
+  function listSnapshots() {
+    if (historyIssue) {
+      throw historyIssue;
+    }
+    return clone(
+      [...persistedHistory.snapshots].sort(
+        (left, right) =>
+          right.createdAt.localeCompare(left.createdAt) ||
+          right.id.localeCompare(left.id),
+      ),
+    );
+  }
+
+  function exportHistory() {
+    if (historyIssue) {
+      throw historyIssue;
+    }
+    return clone(persistedHistory);
+  }
+
   async function saveLastBackup(createdAt) {
     const metadata = { version: LAST_BACKUP_VERSION, createdAt };
     if (!validBackupMetadata(metadata)) {
@@ -950,14 +1288,41 @@ export function createBrowserStorageService({
       throw new TypeError("Cannot save invalid Safety File connection metadata.");
     }
     requireDatabase();
+    const verification = {
+      version: EXTERNAL_BACKUP_VERSION,
+      kind: "safety-file",
+      identity: connection.fileId,
+      contentAt: connection.fileUpdatedAt,
+      verifiedAt: connection.verifiedAt,
+    };
 
+    try {
+      await runTransaction(database, METADATA_STORE, "readwrite", (transaction) => {
+        const metadata = transaction.objectStore(METADATA_STORE);
+        metadata.put(safetyFileConnectionRecord(connection));
+        metadata.put(externalBackupRecord(verification));
+      });
+      externalBackupMetadata = verification;
+      return clone(connection);
+    } catch (error) {
+      throw classifiedFailure(error);
+    }
+  }
+
+  async function saveExternalBackupVerification(value) {
+    const metadata = { version: EXTERNAL_BACKUP_VERSION, ...clone(value) };
+    if (!validExternalBackup(metadata)) {
+      throw new TypeError("Cannot save invalid external-backup verification metadata.");
+    }
+    requireDatabase();
     try {
       await runTransaction(database, METADATA_STORE, "readwrite", (transaction) => {
         transaction
           .objectStore(METADATA_STORE)
-          .put(safetyFileConnectionRecord(connection));
+          .put(externalBackupRecord(metadata));
       });
-      return clone(connection);
+      externalBackupMetadata = metadata;
+      return clone(metadata);
     } catch (error) {
       throw classifiedFailure(error);
     }
@@ -988,15 +1353,20 @@ export function createBrowserStorageService({
     try {
       await runTransaction(
         database,
-        [NOTES_STORE, METADATA_STORE],
+        [NOTES_STORE, METADATA_STORE, SNAPSHOTS_STORE, SNAPSHOT_NOTES_STORE],
         "readwrite",
         (transaction) => {
           transaction.objectStore(NOTES_STORE).clear();
           transaction.objectStore(METADATA_STORE).clear();
+          transaction.objectStore(SNAPSHOTS_STORE).clear();
+          transaction.objectStore(SNAPSHOT_NOTES_STORE).clear();
         },
       );
       persistedDocument = null;
+      persistedHistory = emptyHistoryArchive();
+      historyIssue = null;
       lastBackupMetadata = null;
+      externalBackupMetadata = null;
       pendingLegacyCleanupKeys = [];
       writeProtected = false;
       initializationError = null;
@@ -1030,7 +1400,12 @@ export function createBrowserStorageService({
     initialize,
     saveNotebook,
     replaceNotebook,
+    restoreNotebook,
+    listSnapshots,
+    loadSnapshot,
+    exportHistory,
     saveLastBackup,
+    saveExternalBackupVerification,
     saveSafetyFileConnection,
     disconnectSafetyFile,
     clear,

@@ -1,8 +1,16 @@
 import { clampNoteTimestamps, isValidNotesDocument } from "./storage.js";
+import {
+  MAX_HISTORY_BYTES,
+  emptyHistoryArchive,
+  encodedJsonBytes,
+  validateHistoryArchive,
+} from "./snapshots.js";
 
 export const SAFETY_FILE_FORMAT = "jotkeep-safety-file";
-export const SAFETY_FILE_VERSION = 1;
-export const MAX_SAFETY_FILE_BYTES = 25 * 1024 * 1024;
+export const SAFETY_FILE_VERSION = 2;
+export const LEGACY_SAFETY_FILE_VERSION = 1;
+export const MAX_CURRENT_DOCUMENT_BYTES = 25 * 1024 * 1024;
+export const MAX_SAFETY_FILE_BYTES = 50 * 1024 * 1024;
 
 export class SafetyFileValidationError extends Error {
   constructor(message, { code = null } = {}) {
@@ -29,14 +37,33 @@ export async function verifyEmbeddedChecksum(
   { cryptoObject = globalThis.crypto } = {},
 ) {
   if (typeof value?.checksum !== "string") {
-    return; // Files from older versions carry no checksum.
+    if (value?.version === LEGACY_SAFETY_FILE_VERSION) {
+      return; // Version 1 files predate required embedded checksums.
+    }
+    throw new SafetyFileValidationError(
+      "This version 2 Safety File is missing its required checksum. Restore from another copy.",
+      { code: "checksum-missing" },
+    );
   }
-  if (value.checksum !== (await notebookChecksum(value.document, { cryptoObject }))) {
+  const expected = value.version === LEGACY_SAFETY_FILE_VERSION
+    ? await notebookChecksum(value.document, { cryptoObject })
+    : await safetyFileChecksum(value, { cryptoObject });
+  if (value.checksum !== expected) {
     throw new SafetyFileValidationError(
       "The file's embedded checksum does not match its notes. The file may be corrupted; restore from another copy.",
       { code: "checksum-mismatch" },
     );
   }
+}
+
+export async function safetyFileChecksum(
+  value,
+  { cryptoObject = globalThis.crypto } = {},
+) {
+  return fingerprintText(
+    JSON.stringify({ document: value.document, history: value.history }),
+    { cryptoObject },
+  );
 }
 
 function isIsoTimestamp(value) {
@@ -72,6 +99,7 @@ export function createSafetyFile(
   document,
   {
     previous = null,
+    history,
     now = () => new Date(),
     idFactory = createSafetyFileId,
   } = {},
@@ -81,6 +109,14 @@ export function createSafetyFile(
   }
   if (previous !== null) {
     validateSafetyFile(previous);
+  }
+  const nextHistory = history ?? previous?.history ?? emptyHistoryArchive();
+  validateHistoryArchive(nextHistory);
+  if (encodedJsonBytes(nextHistory) > MAX_HISTORY_BYTES) {
+    throw new SafetyFileValidationError(
+      "Snapshot history is larger than 25 MiB and cannot fit in a Safety File.",
+      { code: "too-large" },
+    );
   }
 
   // Clamp against the previous revision so a clock rollback cannot produce a
@@ -99,6 +135,7 @@ export function createSafetyFile(
     // Normalized on write as well as on parse so a round-trip through disk
     // reproduces the same bytes and write verification stays exact.
     document: clampNoteTimestamps(structuredClone(document)),
+    history: structuredClone(nextHistory),
   };
 }
 
@@ -111,7 +148,10 @@ export function validateSafetyFile(value) {
       "This is not a JotKeep Safety File. Choose a file ending in .jotkeep.",
     );
   }
-  if (value.version !== SAFETY_FILE_VERSION) {
+  if (
+    value.version !== LEGACY_SAFETY_FILE_VERSION &&
+    value.version !== SAFETY_FILE_VERSION
+  ) {
     throw new SafetyFileValidationError(
       `Safety File version ${String(value.version)} is not supported. This version of JotKeep supports version ${SAFETY_FILE_VERSION}.`,
     );
@@ -140,6 +180,25 @@ export function validateSafetyFile(value) {
       "The Safety File contains invalid notes or preferences and cannot be opened.",
     );
   }
+  if (encodedJsonBytes(value.document) > MAX_CURRENT_DOCUMENT_BYTES) {
+    throw new SafetyFileValidationError(
+      "The Safety File's current notebook is larger than 25 MiB.",
+      { code: "too-large" },
+    );
+  }
+  if (value.version === SAFETY_FILE_VERSION) {
+    try {
+      validateHistoryArchive(value.history);
+    } catch (error) {
+      throw new SafetyFileValidationError(error.message);
+    }
+    if (encodedJsonBytes(value.history) > MAX_HISTORY_BYTES) {
+      throw new SafetyFileValidationError(
+        "The Safety File's snapshot history is larger than 25 MiB.",
+        { code: "too-large" },
+      );
+    }
+  }
 
   return value;
 }
@@ -147,7 +206,10 @@ export function validateSafetyFile(value) {
 export function serializeSafetyFile(value) {
   validateSafetyFile(value);
   const text = `${JSON.stringify(value, null, 2)}\n`;
-  if (new TextEncoder().encode(text).byteLength > MAX_SAFETY_FILE_BYTES) {
+  const limit = value.version === LEGACY_SAFETY_FILE_VERSION
+    ? MAX_CURRENT_DOCUMENT_BYTES
+    : MAX_SAFETY_FILE_BYTES;
+  if (new TextEncoder().encode(text).byteLength > limit) {
     throw new SafetyFileValidationError(
       "This notebook is too large for a Safety File. Download important notes as text files.",
       { code: "too-large" },
@@ -159,7 +221,7 @@ export function serializeSafetyFile(value) {
 export function parseSafetyFile(text, { byteLength } = {}) {
   const size = byteLength ?? new TextEncoder().encode(text).byteLength;
   if (size > MAX_SAFETY_FILE_BYTES) {
-    throw new SafetyFileValidationError("The selected Safety File is larger than 25 MiB.");
+    throw new SafetyFileValidationError("The selected Safety File is larger than 50 MiB.");
   }
 
   let value;
@@ -171,13 +233,25 @@ export function parseSafetyFile(text, { byteLength } = {}) {
     );
   }
   validateSafetyFile(value);
-  return { ...value, document: clampNoteTimestamps(value.document) };
+  if (
+    value.version === LEGACY_SAFETY_FILE_VERSION &&
+    size > MAX_CURRENT_DOCUMENT_BYTES
+  ) {
+    throw new SafetyFileValidationError("The selected version 1 Safety File is larger than 25 MiB.");
+  }
+  return {
+    ...value,
+    document: clampNoteTimestamps(value.document),
+    history: value.version === SAFETY_FILE_VERSION
+      ? structuredClone(value.history)
+      : emptyHistoryArchive(),
+  };
 }
 
 export function decodeSafetyFile(buffer) {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   if (bytes.byteLength > MAX_SAFETY_FILE_BYTES) {
-    throw new SafetyFileValidationError("The selected Safety File is larger than 25 MiB.");
+    throw new SafetyFileValidationError("The selected Safety File is larger than 50 MiB.");
   }
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
