@@ -109,7 +109,7 @@ test("migrates the version-2 document into individual verified records", async (
   expect(stored.metadata.preferences).toEqual(source.preferences);
   expect(stored.backup).toEqual({ key: "lastBackup", ...backupMetadata });
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup created",
+    "Last JSON backup requested",
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
   expect(
@@ -259,7 +259,7 @@ test("preserves backup status when the blank notebook has never been saved", asy
   await page.getByRole("menuitem", { name: "Export JSON backup…" }).click();
   await downloadPromise;
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup created",
+    "Last JSON backup requested",
   );
 
   const stored = await readStorage(page);
@@ -268,7 +268,7 @@ test("preserves backup status when the blank notebook has never been saved", asy
 
   await page.reload();
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup created",
+    "Last JSON backup requested",
   );
 });
 
@@ -361,4 +361,60 @@ test("reports a denied persistent-storage request without affecting saves", asyn
   await expect(page.locator("#storage-status")).toContainText("not granted");
   await page.locator("#note").fill("Still saved");
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+});
+
+test("divergent legacy localStorage data is preserved, not deleted", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Note body" }).fill("IndexedDB copy");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+
+  // An older still-open tab could write a different localStorage notebook
+  // after this browser migrated to IndexedDB. It must never be erased just
+  // because an IndexedDB notebook exists.
+  await page.evaluate(
+    ([key, value]) => localStorage.setItem(key, JSON.stringify(value)),
+    [STORAGE_KEY, documentFixture()],
+  );
+
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Note body" })).toHaveValue(
+    "IndexedDB copy",
+  );
+  expect(
+    await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+  ).not.toBeNull();
+});
+
+test("matching legacy localStorage data is still cleaned up after reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Note body" }).fill("Synced copy");
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+  const stored = await readStorage(page);
+  expect(stored.notes.length).toBeGreaterThan(0);
+
+  // Seed legacy data that matches IndexedDB exactly: cleanup should proceed.
+  await page.evaluate(
+    ([key, notes, metadata]) => {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 2,
+          activeNoteId: metadata.activeNoteId,
+          notes,
+          preferences: metadata.preferences,
+        }),
+      );
+    },
+    [STORAGE_KEY, stored.notes, stored.metadata],
+  );
+
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
+  expect(
+    await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+  ).toBeNull();
 });

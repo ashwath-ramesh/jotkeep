@@ -206,6 +206,16 @@ input[type="checkbox"] {
   border: 0;
 }
 
+.noscript-note {
+  padding: 0.75rem 1rem;
+  margin: 0;
+  border-bottom: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 19rem minmax(0, 1fr);
@@ -245,7 +255,7 @@ input[type="checkbox"] {
   text-transform: uppercase;
 }
 
-.notes-header h1 {
+.notes-header h2 {
   margin: 0;
   font-size: 1.1875rem;
   font-weight: 800;
@@ -631,6 +641,12 @@ input[type="checkbox"] {
   outline-offset: -2px;
 }
 
+/* Programmatic focus at startup stands in for the removed autofocus
+   attribute, which never drew a ring; interaction removes the class. */
+.notepad.boot-focus:focus-visible {
+  outline: 0;
+}
+
 .status-bar {
   display: flex;
   flex-wrap: wrap;
@@ -685,6 +701,23 @@ input[type="checkbox"] {
   order: 4;
   width: 100%;
   color: var(--quiet-ink);
+}
+
+#offline-status {
+  color: var(--quiet-ink);
+}
+
+#offline-status:empty {
+  display: none;
+}
+
+.update-ready-button {
+  min-height: 1.5rem;
+  padding: 0.1rem 0.6rem;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
 }
 
 .safety-conflict-actions {

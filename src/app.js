@@ -9,6 +9,7 @@ import {
   sanitizeFilename,
   serializeBackup,
   titleFromTextFilename,
+  verifyBackupChecksum,
 } from "./backup.js";
 import { clearEditor, countText, createEditorCommands } from "./editor.js";
 import {
@@ -45,6 +46,7 @@ import {
 } from "./indexeddb-storage.js";
 import {
   createSafetyFile,
+  notebookChecksum,
   safetyFileFilename,
   serializeSafetyFile,
 } from "./safety-file-format.js";
@@ -90,6 +92,7 @@ const insertPopup = insertButton.closest(".toolbar-popup");
 const fileButton = document.querySelector("#file-button");
 const fileMenu = document.querySelector("#file-menu");
 const filePopup = fileButton.closest(".toolbar-popup");
+const appShell = document.querySelector(".app-shell");
 const sidebar = document.querySelector("#notes-sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
@@ -208,8 +211,6 @@ themeToggle.addEventListener("click", () => {
 });
 applyTheme(currentTheme());
 
-workspace.inert = true;
-workspace.setAttribute("aria-busy", "true");
 const storageService = createBrowserStorageService();
 const loadedNotes = await storageService.initialize();
 let notesDocument = loadedNotes.document;
@@ -258,6 +259,86 @@ function activeNote() {
   return notesDocument.notes.find(
     (savedNote) => savedNote.id === notesDocument.activeNoteId,
   );
+}
+
+/* Crash-safety journal: IndexedDB saves are debounced and asynchronous, so a
+   crash or process eviction can drop the final edits. Each keystroke writes
+   the active note synchronously to localStorage; the journal is cleared once
+   the notebook persists and reconciled at the next startup. */
+const RECOVERY_STORAGE_KEY = "jotkeep.recovery.v1";
+const RECOVERY_MAX_CONTENT_LENGTH = 256 * 1024;
+
+function writeRecoveryJournal() {
+  const savedNote = activeNote();
+  try {
+    if (!savedNote || savedNote.content.length > RECOVERY_MAX_CONTENT_LENGTH) {
+      localStorage.removeItem(RECOVERY_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(
+      RECOVERY_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        noteId: savedNote.id,
+        title: savedNote.title,
+        content: savedNote.content,
+        updatedAt: savedNote.updatedAt,
+      }),
+    );
+  } catch {
+    /* Recovery is best-effort; the debounced IndexedDB save still runs. */
+  }
+}
+
+function clearRecoveryJournal() {
+  try {
+    localStorage.removeItem(RECOVERY_STORAGE_KEY);
+  } catch {
+    /* A stale journal is discarded at reconciliation instead. */
+  }
+}
+
+function readRecoveryJournal() {
+  try {
+    const raw = localStorage.getItem(RECOVERY_STORAGE_KEY);
+    if (raw === null) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (
+      parsed?.version === 1 &&
+      typeof parsed.noteId === "string" &&
+      typeof parsed.title === "string" &&
+      typeof parsed.content === "string" &&
+      typeof parsed.updatedAt === "string"
+    ) {
+      return parsed;
+    }
+  } catch {
+    /* Unreadable journals are treated as absent. */
+  }
+  return null;
+}
+
+let recoveredUnsavedEdits = false;
+{
+  const journal = readRecoveryJournal();
+  if (journal) {
+    const match = notesDocument.notes.find((item) => item.id === journal.noteId);
+    if (
+      match &&
+      journal.updatedAt > match.updatedAt &&
+      (match.title !== journal.title || match.content !== journal.content)
+    ) {
+      notesDocument = updateNote(notesDocument, journal.noteId, {
+        title: journal.title,
+        content: journal.content,
+      });
+      recoveredUnsavedEdits = true;
+    } else {
+      clearRecoveryJournal();
+    }
+  }
 }
 
 function pluralizedCount(value, singular, plural) {
@@ -356,13 +437,13 @@ function renderSafetyFileStatus() {
 
 function renderBackupStatus() {
   if (lastBackupMetadata === null) {
-    backupStatus.textContent = "No JSON backup created in this browser";
+    backupStatus.textContent = "No JSON backup requested in this browser";
     backupStatus.removeAttribute("title");
     return;
   }
 
   const created = new Date(lastBackupMetadata.createdAt);
-  backupStatus.textContent = `Last JSON backup created ${timestampFormatter.format(created)}`;
+  backupStatus.textContent = `Last JSON backup requested ${timestampFormatter.format(created)}`;
   backupStatus.title = lastBackupMetadata.createdAt;
 }
 
@@ -504,8 +585,18 @@ showActiveNote();
 renderNotes();
 renderBackupStatus();
 renderStorageStatus();
-workspace.inert = false;
-workspace.removeAttribute("aria-busy");
+appShell.inert = false;
+appShell.removeAttribute("aria-busy");
+// The textarea deliberately has no autofocus attribute: the shell ships inert
+// so pre-bootstrap keystrokes cannot be silently dropped. The boot-focus
+// class suppresses the focus ring this programmatic focus would draw
+// (autofocus never drew one); real keyboard interaction restores it.
+note.classList.add("boot-focus");
+const removeBootFocus = () => note.classList.remove("boot-focus");
+note.addEventListener("keydown", removeBootFocus, { once: true });
+note.addEventListener("pointerdown", removeBootFocus, { once: true });
+note.addEventListener("blur", removeBootFocus, { once: true });
+note.focus({ preventScroll: true });
 
 const autosave = createAutosave({
   delay: AUTOSAVE_DELAY_MS,
@@ -524,6 +615,8 @@ const autosave = createAutosave({
     }
   },
   onSaved: () => {
+    clearRecoveryJournal();
+    warnWhenApproachingBackupLimit();
     safetyCoordinator.localSaveSettled(notesDocument);
   },
   onError: reportStorageIssue,
@@ -546,7 +639,32 @@ autosave.setState(storageIssue?.kind === STORAGE_FAILURES.MIGRATION
   : loadedNotes.storageAvailable
     ? SAVE_STATES.SAVED
     : SAVE_STATES.UNAVAILABLE);
-void safetyCoordinator.initialize(notesDocument);
+if (recoveredUnsavedEdits) {
+  autosave.markDirty();
+  showActiveNote();
+  setCommandFeedback("Recovered edits that had not finished saving.");
+}
+void safetyCoordinator.initialize(notesDocument, {
+  documentGenerated: loadedNotes.documentGenerated === true,
+});
+
+/* Backups and Safety Files stop working at 25 MiB, so warn well before the
+   notebook gets there instead of failing every complete-backup route at once. */
+const BACKUP_LIMIT_WARN_CHARACTERS = 20 * 1024 * 1024;
+const BACKUP_LIMIT_REARM_CHARACTERS = 18 * 1024 * 1024;
+let warnedAboutBackupLimit = false;
+
+function warnWhenApproachingBackupLimit() {
+  const estimatedSize = JSON.stringify(notesDocument).length;
+  if (estimatedSize > BACKUP_LIMIT_WARN_CHARACTERS && !warnedAboutBackupLimit) {
+    warnedAboutBackupLimit = true;
+    setCommandFeedback(
+      "This notebook is approaching the 25 MiB backup limit. Download large notes as text files or split the notebook soon.",
+    );
+  } else if (estimatedSize < BACKUP_LIMIT_REARM_CHARACTERS) {
+    warnedAboutBackupLimit = false;
+  }
+}
 
 async function persistImmediately() {
   safetyCoordinator.markDirty();
@@ -566,6 +684,7 @@ function updateActiveNote(changes) {
   }
 
   notesDocument = nextDocument;
+  writeRecoveryJournal();
   setCommandFeedback("");
   renderNotes();
   safetyCoordinator.markDirty();
@@ -749,7 +868,9 @@ function downloadFile(content, type, filename) {
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Revoking immediately can break the download in browsers that fetch the
+  // object URL asynchronously; give the download a generous head start.
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
 function chooseFile(input) {
@@ -827,6 +948,7 @@ async function downloadSafetyFile() {
   await autosave.flush();
   try {
     const value = createSafetyFile(notesDocument);
+    value.checksum = await notebookChecksum(value.document);
     const serialized = serializeSafetyFile(value);
     const filename = safetyFileFilename(value.createdAt);
     downloadFile(serialized, "application/json;charset=utf-8", filename);
@@ -948,6 +1070,7 @@ safetyOpenConfirm.addEventListener("click", async () => {
       ? mergeBackupDocument(notesDocument, read.value.document)
       : structuredClone(read.value.document);
 
+    clearRecoveryJournal();
     await safetyCoordinator.waitForIdle();
     if (selected.handle) {
       await safetyCoordinator.prepareConnectionSwitch(read.value.fileId);
@@ -1027,6 +1150,7 @@ safetyUseFile.addEventListener("click", async () => {
     const connection = safetyCoordinator.getConnection();
     const read = await readSafetyFileHandle(connection.handle);
     await storageService.replaceNotebook(read.value.document);
+    clearRecoveryJournal();
     notesDocument = structuredClone(read.value.document);
     textImportGeneration += 1;
     canSafelySave = true;
@@ -1062,17 +1186,28 @@ async function importTextFile(file, generation) {
   }
 
   const content = decodeUtf8(await file.arrayBuffer());
-  if (generation !== textImportGeneration) {
+  if (generation !== textImportGeneration || notebookTransitionPending) {
     return;
   }
 
-  await autosave.flush();
-  notesDocument = addNote(notesDocument, {
-    title: titleFromTextFilename(file.name),
-    content,
-  });
-  searchInput.value = "";
-  const saved = await persistImmediately();
+  // Disable the editor for the whole transition so typing during a slow save
+  // cannot apply stale field values to the imported note.
+  setNotebookTransitionPending(true);
+  let saved;
+  try {
+    await autosave.flush();
+    notesDocument = addNote(notesDocument, {
+      title: titleFromTextFilename(file.name),
+      content,
+    });
+    searchInput.value = "";
+    saved = await persistImmediately();
+  } finally {
+    setNotebookTransitionPending(false);
+  }
+  if (narrowLayout.matches) {
+    setSidebarOpen(false);
+  }
   showActiveNote({ focus: "body" });
   renderNotes();
   setCommandFeedback(
@@ -1080,10 +1215,6 @@ async function importTextFile(file, generation) {
       ? `Imported “${file.name}” as a new note.`
       : `Imported “${file.name}” for this session, but browser storage is unavailable.`,
   );
-
-  if (narrowLayout.matches) {
-    setSidebarOpen(false);
-  }
 }
 
 textFileInput.addEventListener("change", async () => {
@@ -1109,7 +1240,7 @@ async function downloadActiveNote() {
   const savedNote = activeNote();
   const filename = sanitizeFilename(savedNote.title);
   downloadFile(savedNote.content, "text/plain;charset=utf-8", filename);
-  setCommandFeedback(`Created text download “${filename}”.`);
+  setCommandFeedback(`Requested text download “${filename}”.`);
 }
 
 async function exportJsonBackup() {
@@ -1117,6 +1248,7 @@ async function exportJsonBackup() {
 
   try {
     const backup = createBackup(notesDocument);
+    backup.checksum = await notebookChecksum(backup.document);
     const serialized = serializeBackup(backup);
     parseBackup(serialized);
     const filename = backupFilename(backup.createdAt);
@@ -1134,8 +1266,8 @@ async function exportJsonBackup() {
     renderBackupStatus();
     setCommandFeedback(
       metadataSaved
-        ? `Created JSON backup “${filename}”. Keep the downloaded file somewhere safe.`
-        : `Created JSON backup “${filename}”, but this browser could not remember its date.`,
+        ? `Requested JSON backup download “${filename}”. Confirm the download finished and keep the file somewhere safe.`
+        : `Requested JSON backup download “${filename}”, but this browser could not remember its date.`,
     );
   } catch (error) {
     setCommandFeedback(`Could not create backup: ${error.message}`);
@@ -1240,7 +1372,9 @@ async function readBackupFile(file) {
     throw new TypeError("The selected backup is not valid UTF-8.");
   }
 
-  return parseBackup(text, { byteLength: file.size });
+  const parsed = parseBackup(text, { byteLength: file.size });
+  await verifyBackupChecksum(parsed);
+  return parsed;
 }
 
 backupFileInput.addEventListener("change", async () => {
@@ -1332,6 +1466,7 @@ restoreConfirm.addEventListener("click", async () => {
     return;
   }
 
+  clearRecoveryJournal();
   textImportGeneration += 1;
   notesDocument = candidate;
   canSafelySave = true;
@@ -1390,6 +1525,10 @@ clearDataConfirm.addEventListener("click", async () => {
     return;
   }
 
+  clearRecoveryJournal();
+  // The dialog promises to remove preferences, which includes the manual
+  // theme override.
+  applyTheme("auto");
   textImportGeneration += 1;
   autosave.reset(SAVE_STATES.CLEARED);
   canSafelySave = true;
@@ -1438,7 +1577,10 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
         if (await safetyCoordinator.grant(notesDocument)) {
           setCommandFeedback("Safety File access restored and the file was verified.");
         } else {
-          setCommandFeedback("Safety File access was not granted. Local saves continue normally.");
+          setCommandFeedback(
+            safetyState.error?.message ??
+              "Safety File access was not granted. Local saves continue normally.",
+          );
         }
         break;
       case "resolve-safety":
@@ -1897,14 +2039,18 @@ async function selectSavedNote(noteId) {
     } finally {
       setNotebookTransitionPending(false);
     }
+    // Close the drawer before focusing: while it is open the workspace is
+    // inert and cannot receive focus.
+    if (narrowLayout.matches) {
+      setSidebarOpen(false);
+    }
     showActiveNote({ focus: "body" });
     renderNotes();
   } else {
+    if (narrowLayout.matches) {
+      setSidebarOpen(false);
+    }
     note.focus();
-  }
-
-  if (narrowLayout.matches) {
-    setSidebarOpen(false);
   }
 }
 
@@ -1921,12 +2067,11 @@ async function createSavedNote() {
   } finally {
     setNotebookTransitionPending(false);
   }
-  showActiveNote({ focus: "title" });
-  renderNotes();
-
   if (narrowLayout.matches) {
     setSidebarOpen(false);
   }
+  showActiveNote({ focus: "title" });
+  renderNotes();
 }
 
 async function deleteSavedNote(noteId, trigger) {
@@ -1979,11 +2124,10 @@ async function deleteSavedNote(noteId, trigger) {
   renderNotes();
 
   if (deletingActiveNote) {
-    showActiveNote({ focus: deletingOnlyNote ? "title" : "body" });
-
     if (narrowLayout.matches) {
       setSidebarOpen(false);
     }
+    showActiveNote({ focus: deletingOnlyNote ? "title" : "body" });
   } else {
     const activeButton = notesList.querySelector('[aria-current="true"]');
     (activeButton ?? searchInput).focus();
@@ -2023,6 +2167,96 @@ listViewSelect.addEventListener("change", async () => {
   await persistImmediately();
 });
 
+/* Service worker lifecycle: the worker never takes over running tabs on its
+   own (no unsolicited skipWaiting). When an update is waiting, a status-bar
+   button lets the user flush local edits and reload into the new version.
+   Install failures are surfaced instead of silently losing offline support. */
+const offlineStatus = document.querySelector("#offline-status");
+const updateReadyButton = document.querySelector("#update-ready");
+
+function setOfflineStatus(message) {
+  offlineStatus.textContent = message;
+  offlineStatus.title = message;
+}
+
+function offerServiceWorkerUpdate(registration) {
+  if (!registration.waiting) {
+    return;
+  }
+  updateReadyButton.hidden = false;
+  updateReadyButton.onclick = async () => {
+    updateReadyButton.disabled = true;
+    await autosave.flush();
+    navigator.serviceWorker.addEventListener(
+      "controllerchange",
+      () => window.location.reload(),
+      { once: true },
+    );
+    registration.waiting?.postMessage("SKIP_WAITING");
+  };
+}
+
+function setupServiceWorker() {
+  if (
+    !("serviceWorker" in navigator) ||
+    (window.location.protocol !== "https:" &&
+      !["localhost", "127.0.0.1"].includes(window.location.hostname))
+  ) {
+    return;
+  }
+  const register = async () => {
+    let registration;
+    try {
+      registration = await navigator.serviceWorker.register("./sw.js", {
+        updateViaCache: "none",
+      });
+    } catch {
+      setOfflineStatus("Offline support unavailable; notes still save in this browser.");
+      return;
+    }
+
+    if (registration.active) {
+      setOfflineStatus("Offline ready");
+    }
+    offerServiceWorkerUpdate(registration);
+    registration.addEventListener("updatefound", () => {
+      const installing = registration.installing;
+      installing?.addEventListener("statechange", () => {
+        if (installing.state === "activated") {
+          setOfflineStatus("Offline ready");
+        } else if (
+          installing.state === "installed" &&
+          navigator.serviceWorker.controller
+        ) {
+          // Only a real update gets the prompt; a first install passes
+          // through "installed" briefly but has no controller yet.
+          offerServiceWorkerUpdate(registration);
+        } else if (installing.state === "redundant" && !registration.active) {
+          setOfflineStatus(
+            "Offline support could not be installed; reload to retry.",
+          );
+        }
+      });
+    });
+  };
+
+  // The module graph loads after a top-level await, so the window load event
+  // may already be in the past.
+  if (document.readyState === "complete") {
+    void register();
+  } else {
+    window.addEventListener("load", () => void register(), { once: true });
+  }
+}
+
+setupServiceWorker();
+
+window.addEventListener("beforeunload", (event) => {
+  if (autosave.isDirty()) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
 window.addEventListener("pagehide", () => {
   void autosave.flush();
 });

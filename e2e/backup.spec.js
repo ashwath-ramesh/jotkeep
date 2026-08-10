@@ -139,7 +139,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
     listView: "compact",
   });
   await expect(page.locator("#backup-status")).toContainText(
-    "Last JSON backup created",
+    "Last JSON backup requested",
   );
 
   await (await openFileAction(page, "Clear all local data…")).click();
@@ -151,7 +151,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   await expect(page.locator("#note-title")).toHaveValue("");
   await expect(page.locator("#note")).toHaveValue("");
   await expect(page.locator("#backup-status")).toHaveText(
-    "No JSON backup created in this browser",
+    "No JSON backup requested in this browser",
   );
 
   await page.locator("#backup-file-input").setInputFiles({
@@ -264,4 +264,47 @@ test("selecting another backup disables restore until validation finishes", asyn
 
   await releaseFileRead(page);
   await expect(page.getByRole("button", { name: "Merge backup" })).toBeEnabled();
+});
+
+test("imported HTML and script payloads stay inert text everywhere", async ({
+  page,
+}) => {
+  const payloadTitle = '<img src=x onerror="window.__xss=1">';
+  const payloadContent = '<script>window.__xss=2</script><svg onload="window.__xss=3">';
+  const backup = {
+    format: "jotkeep-backup",
+    version: 1,
+    createdAt: "2026-08-09T12:00:00.000Z",
+    document: {
+      version: 2,
+      activeNoteId: "note_payload",
+      notes: [
+        {
+          id: "note_payload",
+          title: payloadTitle,
+          content: payloadContent,
+          createdAt: "2026-08-09T12:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z",
+        },
+      ],
+      preferences: { sortBy: "updatedAt", listView: "detailed" },
+    },
+  };
+
+  await (await openFileAction(page, "Restore JSON backup…")).click();
+  await page.locator("#backup-file-input").setInputFiles({
+    name: "payload.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
+  await page.getByRole("radio", { name: /^Replace/u }).check();
+  await page.getByRole("button", { name: "Replace all local notes" }).click();
+
+  await expect(page.locator("#note-title")).toHaveValue(payloadTitle);
+  await expect(page.locator("#note")).toHaveValue(payloadContent);
+  await expect(page.locator(".note-list-title")).toHaveText(payloadTitle);
+
+  // The payloads must exist only as text: no injected elements, no execution.
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  expect(await page.locator("#notes-list img, #notes-list svg, #notes-list script").count()).toBe(0);
 });

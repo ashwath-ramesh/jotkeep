@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- GitHub Pages cannot set response headers, so the CSP ships as a meta
+         tag. The sha256 hash covers the inline boot script below; a unit test
+         (tests/csp.test.js) recomputes it so the two cannot drift apart. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'sha256-Ulbs8PtRABFkmol36p71fUMqkn5eWFuFGa6bOwySE70='; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
     <meta
       name="description"
       content="A minimal, private notepad that saves in your browser."
@@ -52,7 +59,14 @@
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
-    <main class="app-shell">
+    <noscript>
+      <p class="noscript-note">
+        JotKeep needs JavaScript to edit and save notes. Enable JavaScript and
+        reload this page.
+      </p>
+    </noscript>
+    <main class="app-shell" inert aria-busy="true">
+      <h1 class="visually-hidden">JotKeep</h1>
       <button
         id="sidebar-backdrop"
         class="sidebar-backdrop"
@@ -65,7 +79,7 @@
         <div class="notes-header">
           <div>
             <p class="eyebrow">JotKeep</p>
-            <h1>Notes</h1>
+            <h2>Notes</h2>
           </div>
           <button id="new-note" class="primary-button" type="button">
             New note
@@ -150,7 +164,7 @@
           </button>
         </header>
 
-        <div class="toolbar" role="toolbar" aria-label="Editing commands">
+        <div class="toolbar" role="group" aria-label="Editing commands">
           <div class="desktop-commands">
             <div class="toolbar-popup">
               <button
@@ -364,19 +378,25 @@
             id="note"
             name="note"
             placeholder="Start typing…"
-            autofocus
             spellcheck="true"
             autocapitalize="sentences"
           ></textarea>
         </section>
 
         <footer class="status-bar">
-          <span id="save-state" role="status" aria-live="polite" data-saved="true">Local: Saved</span>
-          <span id="safety-file-status" role="status" aria-live="polite">
+          <!-- Save and Safety File states change too often for polite live
+               regions; they stay visual-only and settled outcomes announce
+               through #command-feedback. -->
+          <span id="save-state" data-saved="false">Local: Loading…</span>
+          <span id="safety-file-status">
             Safety File: Checking…
           </span>
           <span id="command-feedback" role="status" aria-live="polite"></span>
-          <span id="backup-status">No JSON backup created in this browser</span>
+          <span id="backup-status">No JSON backup requested in this browser</span>
+          <span id="offline-status"></span>
+          <button id="update-ready" class="update-ready-button" type="button" hidden>
+            Update ready — refresh
+          </button>
           <span class="counts" aria-label="Document counts">
             <span id="word-count">0 words</span>
             <span aria-hidden="true">·</span>
@@ -600,19 +620,6 @@
       </div>
     </dialog>
 
-    <script>
-      if (
-        "serviceWorker" in navigator &&
-        (location.protocol === "https:" ||
-          ["localhost", "127.0.0.1"].includes(location.hostname))
-      ) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("./sw.js", { updateViaCache: "none" })
-            .catch(() => {});
-        });
-      }
-    </script>
     <script type="module" src="src/app.js"></script>
   </body>
 </html>
