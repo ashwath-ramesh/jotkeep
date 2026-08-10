@@ -35,7 +35,6 @@ The core promise:
   - [Phase 11 — Account-free device transfer](#phase-11--account-free-device-transfer)
   - [Phase 12 — Launch readiness and optional hosted sync](#phase-12--launch-readiness-and-optional-hosted-sync)
 - [Sustainability boundaries](#sustainability-boundaries)
-- [Suggested interface](#suggested-interface)
 - [Current data model](#current-data-model)
 - [Source structure](#source-structure)
 - [Keyboard shortcuts to support](#keyboard-shortcuts-to-support)
@@ -457,20 +456,6 @@ documented way to leave without loss of access to notes.
 A paid service can require an account. A local `.jotkeep` file never
 requires an account. Billing identity, synchronization identity, and
 notebook encryption keys stay separate concepts.
-
-## Suggested interface
-
-The desktop layout has three regions:
-
-1. **Notes panel** — create, search, sort, switch, and delete notes.
-2. **Command bar** — File, Edit, Insert, Format, Tools, View, and Help
-   actions.
-3. **Editor** — title, plain-text body, save status, word count, and
-   character count.
-
-On small screens, the notes panel becomes a drawer and secondary commands
-move into an overflow menu. The editor must stay usable without horizontal
-page scrolling.
 
 ## Current data model
 
