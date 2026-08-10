@@ -12,15 +12,6 @@ The core promise:
 > No sign-up, no lock-in, and no silent data loss when browser storage is
 > cleared — if the user has connected or downloaded a Safety File.
 
-## Project status
-
-Phase 6 is complete. The application supports many notes, uses focused
-modules, and has no runtime dependencies. The checked items in Phases 1–6 of
-the roadmap list the completed features.
-
-The later phases are the implementation roadmap. Check an item only after its
-behavior and acceptance criteria are complete.
-
 ## Run locally
 
 The application has no runtime dependencies and no build step. Serve the
