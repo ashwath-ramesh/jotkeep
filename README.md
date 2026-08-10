@@ -2,9 +2,10 @@
 
 JotKeep is a privacy-first, plain-text notepad that runs in the browser. It
 needs no installation and no account. Notes stay usable, portable, and
-recoverable without JotKeep. The long-term goal adds a user-owned **Safety
-File**: a notebook file, with optional encryption and version history, that
-JotKeep updates automatically and keeps outside browser storage.
+recoverable without JotKeep. Each notebook can have a user-owned **Safety
+File**: a notebook file that JotKeep updates automatically and keeps outside
+browser storage. Version history and optional encryption for the Safety File
+are on the roadmap.
 
 The core promise:
 
