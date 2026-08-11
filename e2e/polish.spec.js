@@ -5,6 +5,64 @@ async function openViewMenu(page) {
   return page.locator("#view-menu");
 }
 
+async function expectNotepadFillsEditorPanel(page) {
+  await expect
+    .poll(() =>
+      page.locator("#note").evaluate((note) => {
+        const noteBox = note.getBoundingClientRect();
+        const panelBox = note.closest(".editor-panel").getBoundingClientRect();
+        return Math.abs(noteBox.bottom - panelBox.bottom);
+      }),
+    )
+    .toBeLessThanOrEqual(1);
+}
+
+test("the note body fills the remaining viewport and scrolls long notes internally", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+
+  const editor = page.getByRole("textbox", { name: "Note body" });
+  const guide = page.getByRole("region", {
+    name: "Three things to know before you write",
+  });
+  await expect(guide).toBeVisible();
+  await expectNotepadFillsEditorPanel(page);
+
+  const longNote = Array.from(
+    { length: 120 },
+    (_, index) => `Line ${index + 1}: enough content to require scrolling`,
+  ).join("\n");
+  await editor.fill(longNote);
+  await expect(guide).toBeHidden();
+  await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expectNotepadFillsEditorPanel(page);
+
+    const layout = await editor.evaluate((note) => {
+      const noteBox = note.getBoundingClientRect();
+      const statusBox = document
+        .querySelector("#status-bar")
+        .getBoundingClientRect();
+      return {
+        distanceFromStatusBar: Math.abs(noteBox.bottom - statusBox.top),
+        documentScrolls:
+          document.documentElement.scrollHeight > window.innerHeight,
+        editorScrolls: note.scrollHeight > note.clientHeight,
+      };
+    });
+    expect(layout.distanceFromStatusBar).toBeLessThanOrEqual(1);
+    expect(layout.documentScrolls).toBe(false);
+    expect(layout.editorScrolls).toBe(true);
+  }
+});
+
 test("appearance settings apply to every note, survive reload, and reset independently", async ({
   page,
 }) => {

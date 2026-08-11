@@ -878,7 +878,8 @@ input[type="checkbox"] {
 .notepad {
   display: block;
   width: 100%;
-  min-height: 20rem;
+  min-height: 0;
+  flex: 1 1 auto;
   padding-block: clamp(1.25rem, 2vw, 1.75rem);
   /* Inline start lines up with the File button label in the toolbar */
   padding-inline: calc(clamp(0.75rem, 2vw, 1.5rem) + 0.75rem);
