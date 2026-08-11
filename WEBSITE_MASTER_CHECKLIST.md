@@ -87,14 +87,14 @@ requirements that do not apply to this product.
 
 ## 1. Product entry and first use
 
-- [ ] State that JotKeep is a private, plain-text notepad before the first edit.
+- [x] State that JotKeep is a private, plain-text notepad before the first edit.
 - [x] State that JotKeep does not require an account.
-- [ ] Explain that browser storage is not an external backup.
+- [x] Explain that browser storage is not an external backup.
 - [x] Put keyboard focus in the empty note body on the first visit.
 - [x] Show a specific loading message until the notebook and event handlers are ready.
 - [x] Prevent edits until JotKeep can keep or report each change.
 - [ ] Show a specific failure message if application startup does not finish.
-- [ ] Provide a clear path from the first note to the backup instructions.
+- [x] Provide a clear path from the first note to the backup instructions.
 
 ## 2. Application shell and navigation
 

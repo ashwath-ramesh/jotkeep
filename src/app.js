@@ -122,6 +122,17 @@ const notesList = document.querySelector("#notes-list");
 const notesEmptyState = document.querySelector("#notes-empty-state");
 const notesEmptyMessage = document.querySelector("#notes-empty-message");
 const clearNoteSearchButton = document.querySelector("#clear-note-search");
+const firstUseGuide = document.querySelector("#first-use-guide");
+const firstUseGuideClose = document.querySelector("#first-use-guide-close");
+const firstUseBackupOptions = document.querySelector(
+  "#first-use-backup-options",
+);
+const backupGuideDialog = document.querySelector("#backup-guide-dialog");
+const backupGuideClose = document.querySelector("#backup-guide-close");
+const backupGuideNotNow = document.querySelector("#backup-guide-not-now");
+const backupGuideShowOptions = document.querySelector(
+  "#backup-guide-show-options",
+);
 const workspace = document.querySelector(".workspace");
 const findDialog = document.querySelector("#find-dialog");
 const findDialogTitle = document.querySelector("#find-dialog-title");
@@ -333,6 +344,8 @@ let safetyState = null;
 let pendingSafetyFile = null;
 let safetyFileInputMode = "open";
 let safetyOverwritePending = false;
+let backupGuideReturnFocus = null;
+let openBackupOptionsAfterGuide = false;
 
 const directSafetyFilesSupported = supportsDirectSafetyFiles(window);
 const safetyCoordinator = createSafetyFileCoordinator({
@@ -706,6 +719,35 @@ function renderNotes() {
   noteCountFooter.textContent = `${pluralizedCount(notesDocument.notes.length, "note", "notes")} · local first`;
 }
 
+const FIRST_USE_GUIDE_DISMISSED_KEY = "jotkeep.first-use-guide.dismissed.v1";
+
+function firstUseGuideWasDismissed() {
+  try {
+    return localStorage.getItem(FIRST_USE_GUIDE_DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function dismissFirstUseGuide({ remember = false } = {}) {
+  firstUseGuide.hidden = true;
+  if (remember) {
+    try {
+      localStorage.setItem(FIRST_USE_GUIDE_DISMISSED_KEY, "true");
+    } catch {
+      /* The guide can still close for this visit when storage is unavailable. */
+    }
+  }
+}
+
+function resetFirstUseGuideDismissal() {
+  try {
+    localStorage.removeItem(FIRST_USE_GUIDE_DISMISSED_KEY);
+  } catch {
+    /* Clearing IndexedDB remains useful if localStorage is unavailable. */
+  }
+}
+
 function showActiveNote({ focus = "none" } = {}) {
   const savedNote = activeNote();
   editorCommands?.invalidatePendingCommands();
@@ -724,6 +766,14 @@ function showActiveNote({ focus = "none" } = {}) {
 
 showActiveNote();
 renderNotes();
+const initialNote = activeNote();
+firstUseGuide.hidden = !(
+  loadedNotes.documentGenerated === true &&
+  notesDocument.notes.length === 1 &&
+  initialNote.title === "" &&
+  initialNote.content === "" &&
+  !firstUseGuideWasDismissed()
+);
 renderBackupStatus();
 window.setInterval(renderBackupStatus, BACKUP_STATUS_REFRESH_MS);
 renderStorageStatus();
@@ -842,12 +892,16 @@ function updateActiveNote(changes) {
 }
 
 titleInput.addEventListener("input", () => {
-  updateActiveNote({ title: titleInput.value });
+  if (updateActiveNote({ title: titleInput.value })) {
+    dismissFirstUseGuide();
+  }
 });
 
 note.addEventListener("input", () => {
   updateCounts();
-  updateActiveNote({ content: note.value });
+  if (updateActiveNote({ content: note.value })) {
+    dismissFirstUseGuide();
+  }
 });
 
 editorCommands = createEditorCommands(note, {
@@ -919,6 +973,66 @@ function openFileMenu() {
   fileButton.setAttribute("aria-expanded", "true");
   fileMenu.querySelector('[role="menuitem"]').focus();
 }
+
+function openFirstUseBackupOptions() {
+  const menu = compactToolbar.matches ? commandMenu : fileMenu;
+  if (compactToolbar.matches) {
+    openMenu();
+  } else {
+    openFileMenu();
+  }
+
+  const preferredAction = directSafetyFilesSupported
+    ? "create-safety"
+    : "download-safety";
+  const preferredButton = menu.querySelector(
+    `[data-file-action="${preferredAction}"]`,
+  );
+  preferredButton?.focus();
+}
+
+function openBackupGuide(trigger) {
+  closeAllMenus();
+  backupGuideReturnFocus = trigger;
+  openBackupOptionsAfterGuide = false;
+  backupGuideDialog.showModal();
+  backupGuideClose.focus();
+}
+
+function closeBackupGuide({ showOptions = false } = {}) {
+  openBackupOptionsAfterGuide = showOptions;
+  if (backupGuideDialog.open) {
+    backupGuideDialog.close();
+  }
+}
+
+firstUseGuideClose.addEventListener("click", () => {
+  dismissFirstUseGuide({ remember: true });
+  note.focus();
+});
+firstUseBackupOptions.addEventListener("click", () => {
+  openBackupGuide(firstUseBackupOptions);
+});
+backupGuideClose.addEventListener("click", () => closeBackupGuide());
+backupGuideNotNow.addEventListener("click", () => closeBackupGuide());
+backupGuideShowOptions.addEventListener("click", () => {
+  closeBackupGuide({ showOptions: true });
+});
+backupGuideDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeBackupGuide();
+});
+backupGuideDialog.addEventListener("close", () => {
+  const returnFocus = backupGuideReturnFocus;
+  const showOptions = openBackupOptionsAfterGuide;
+  backupGuideReturnFocus = null;
+  openBackupOptionsAfterGuide = false;
+  if (showOptions) {
+    openFirstUseBackupOptions();
+  } else {
+    returnFocus?.focus();
+  }
+});
 
 function closeViewMenu({ returnFocus = false } = {}) {
   if (viewMenu.hidden) {
@@ -2125,6 +2239,7 @@ clearDataConfirm.addEventListener("click", async () => {
   }
 
   clearRecoveryJournal();
+  resetFirstUseGuideDismissal();
   // Appearance is device-local rather than part of the notebook document,
   // but the dialog promises to remove every JotKeep preference in this browser.
   const clearedAppearance = appearanceStore.clear();
@@ -2144,6 +2259,7 @@ clearDataConfirm.addEventListener("click", async () => {
   renderBackupStatus();
   renderStorageStatus();
   showActiveNote({ focus: "body" });
+  firstUseGuide.hidden = false;
   closeClearDataDialog();
   setCommandFeedback(
     clearedAppearance.persisted

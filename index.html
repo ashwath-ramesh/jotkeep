@@ -490,6 +490,72 @@
         </div>
 
         <section class="editor-panel" aria-label="Note editor">
+          <section
+            id="first-use-guide"
+            class="first-use-guide"
+            aria-labelledby="first-use-guide-title"
+            hidden
+          >
+            <div class="first-use-heading">
+              <div>
+                <p class="eyebrow">New notebook</p>
+                <h2 id="first-use-guide-title">
+                  Three things to know before you write
+                </h2>
+              </div>
+              <button
+                id="first-use-guide-close"
+                class="first-use-close"
+                type="button"
+                aria-label="Close first-use guide"
+                title="Close guide"
+              >
+                ×
+              </button>
+            </div>
+            <p class="first-use-hint">
+              This guide closes after your first edit, or you can close it now.
+            </p>
+            <ol class="first-use-steps">
+              <li>
+                <span class="first-use-number" aria-hidden="true">01</span>
+                <div>
+                  <h3>Write in private plain text</h3>
+                  <p>
+                    JotKeep is a private, plain-text notepad. No account is
+                    required.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span class="first-use-number" aria-hidden="true">02</span>
+                <div>
+                  <h3>Know where notes are kept</h3>
+                  <p>
+                    Notes save to browser storage on this device. Browser
+                    storage is not an external backup and can be cleared.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <span class="first-use-number" aria-hidden="true">03</span>
+                <div>
+                  <h3>Keep an external copy</h3>
+                  <p>
+                    Use a Safety File or export a JSON backup from the File
+                    options.
+                  </p>
+                  <button
+                    id="first-use-backup-options"
+                    class="first-use-action"
+                    type="button"
+                  >
+                    Learn about backups
+                  </button>
+                </div>
+              </li>
+            </ol>
+          </section>
           <label class="visually-hidden" for="note">Note body</label>
           <textarea
             class="notepad"
@@ -553,6 +619,65 @@
       accept=".jotkeep,.json,application/json"
       hidden
     />
+
+    <dialog
+      id="backup-guide-dialog"
+      class="app-dialog backup-guide-dialog"
+      aria-labelledby="backup-guide-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="backup-guide-dialog-title">Back up your notebook</h2>
+        <button
+          id="backup-guide-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Close backup explanation"
+        >
+          ×
+        </button>
+      </div>
+      <div class="dialog-content">
+        <p class="dialog-copy">
+          Keep one of these files outside browser storage so clearing site data
+          does not remove every copy of your notes.
+        </p>
+        <div class="backup-guide-options">
+          <section>
+            <p class="eyebrow">Updated copy</p>
+            <h3>Safety File</h3>
+            <p>
+              A complete copy of your notebook and restore points. JotKeep can
+              keep a connected file updated after local saves when the browser
+              supports direct file access.
+            </p>
+          </section>
+          <section>
+            <p class="eyebrow">Manual snapshot</p>
+            <h3>JSON backup</h3>
+            <p>
+              A complete snapshot of your notes, timestamps, preferences, and
+              active selection. Export a new file whenever you want a current
+              copy.
+            </p>
+          </section>
+        </div>
+        <p class="dialog-copy warning-card" role="note">
+          Neither file is encrypted. Anyone who can access it can read your
+          note titles and content.
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <span class="dialog-action-spacer"></span>
+        <button id="backup-guide-not-now" type="button">Not now</button>
+        <button
+          id="backup-guide-show-options"
+          class="primary-button"
+          type="button"
+        >
+          Show backup options
+        </button>
+      </div>
+    </dialog>
 
     <dialog
       id="appearance-dialog"

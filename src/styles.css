@@ -517,6 +517,7 @@ input[type="checkbox"] {
   display: grid;
   grid-column: 2;
   grid-row: 1;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 100vh;
@@ -693,7 +694,160 @@ input[type="checkbox"] {
 
 .editor-panel {
   display: flex;
+  flex-direction: column;
+  min-width: 0;
   min-height: 0;
+}
+
+.first-use-guide {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(1.25rem, 2.5vw, 2rem)
+    calc(clamp(0.75rem, 2vw, 1.5rem) + 0.75rem);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel);
+}
+
+.first-use-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.first-use-heading > div {
+  min-width: 0;
+}
+
+.first-use-heading p,
+.first-use-heading h2,
+.first-use-steps h3,
+.first-use-steps p {
+  margin: 0;
+}
+
+.first-use-heading h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(1.125rem, 1rem + 0.4vw, 1.375rem);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.first-use-heading .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.first-use-close {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--muted-ink);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.first-use-hint {
+  margin: -0.75rem 0 1.25rem;
+  color: var(--quiet-ink);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.first-use-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.first-use-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding-inline: 1.25rem;
+  border-left: 1px solid var(--line);
+}
+
+.first-use-steps li:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.first-use-steps li:last-child {
+  padding-right: 0;
+}
+
+.first-use-number {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.first-use-steps h3 {
+  margin-bottom: 0.35rem;
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.first-use-steps p {
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.first-use-action {
+  min-height: 2.25rem;
+  margin-top: 0.65rem;
+  padding: 0.3rem 0.65rem;
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.backup-guide-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+}
+
+.backup-guide-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.backup-guide-options section {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+}
+
+.backup-guide-options h3,
+.backup-guide-options p {
+  margin: 0;
+}
+
+.backup-guide-options h3 {
+  margin: 0.25rem 0 0.5rem;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.backup-guide-options section > p:last-child {
+  color: var(--muted-ink);
+  font-size: 0.8125rem;
+  line-height: 1.55;
 }
 
 .notepad {
@@ -1413,6 +1567,26 @@ input[type="checkbox"] {
 
   .notepad {
     padding: 1.25rem 1.5rem;
+  }
+
+  .first-use-guide {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .first-use-steps {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .first-use-steps li,
+  .first-use-steps li:first-child,
+  .first-use-steps li:last-child {
+    padding: 0;
+    border: 0;
+  }
+
+  .backup-guide-options {
+    grid-template-columns: 1fr;
   }
 
   .status-bar {
