@@ -17,6 +17,26 @@ async function expectNotepadFillsEditorPanel(page) {
     .toBeLessThanOrEqual(1);
 }
 
+async function expectAppFillsViewport(page) {
+  await expect
+    .poll(() =>
+      page.locator(".app-shell").evaluate((app) => {
+        const appBox = app.getBoundingClientRect();
+        return {
+          appHeightDifference: Math.abs(appBox.height - window.innerHeight),
+          appBottomDifference: Math.abs(appBox.bottom - window.innerHeight),
+          documentScrolls:
+            document.documentElement.scrollHeight > window.innerHeight,
+        };
+      }),
+    )
+    .toEqual({
+      appHeightDifference: 0,
+      appBottomDifference: 0,
+      documentScrolls: false,
+    });
+}
+
 test("the note body fills the remaining viewport and scrolls long notes internally", async ({
   page,
 }) => {
@@ -29,6 +49,10 @@ test("the note body fills the remaining viewport and scrolls long notes internal
   });
   await expect(guide).toBeVisible();
   await expectNotepadFillsEditorPanel(page);
+  await expectAppFillsViewport(page);
+
+  await page.setViewportSize({ width: 390, height: 600 });
+  await expectAppFillsViewport(page);
 
   const longNote = Array.from(
     { length: 120 },
@@ -44,6 +68,7 @@ test("the note body fills the remaining viewport and scrolls long notes internal
   ]) {
     await page.setViewportSize(viewport);
     await expectNotepadFillsEditorPanel(page);
+    await expectAppFillsViewport(page);
 
     const layout = await editor.evaluate((note) => {
       const noteBox = note.getBoundingClientRect();

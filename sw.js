@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "jotkeep-";
-const CACHE_VERSION = "jotkeep-v14";
+const CACHE_VERSION = "jotkeep-v15";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
