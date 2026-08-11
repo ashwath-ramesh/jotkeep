@@ -1,8 +1,9 @@
 const CACHE_PREFIX = "jotkeep-";
-const CACHE_VERSION = "jotkeep-v12";
+const CACHE_VERSION = "jotkeep-v13";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
+  "./privacy.html",
   "./manifest.webmanifest",
   "./icons/icon.svg",
   "./src/styles.css",
@@ -16,6 +17,7 @@ const PRECACHE_URLS = [
   "./src/insert.js",
   "./src/notes.js",
   "./src/preferences.js",
+  "./src/privacy.css",
   "./src/safety-file-format.js",
   "./src/safety-file.js",
   "./src/snapshots.js",
@@ -66,16 +68,30 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
     return;
   }
-  if (new URL(event.request.url).origin !== self.location.origin) {
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) {
     return;
   }
-  // Navigations serve the precached shell so the page and its assets always
-  // come from the same deployment; freshness arrives via the update prompt.
+  // Known navigations use their exact precached page. Unknown application
+  // routes fall back to the app shell; freshness arrives via the update
+  // prompt, so a page and its assets always come from one deployment.
   // Asset requests match exactly (no ignoreSearch) so a query-busted URL is
   // never satisfied by a stale cached entry.
+  if (event.request.mode === "navigate") {
+    const privacyPath = new URL(
+      "./privacy.html",
+      self.registration.scope,
+    ).pathname;
+    const cachedPage = requestUrl.pathname === privacyPath
+      ? "./privacy.html"
+      : "./index.html";
+    event.respondWith(
+      caches.match(cachedPage).then((cached) => cached ?? fetch(event.request)),
+    );
+    return;
+  }
+
   event.respondWith(
-    caches
-      .match(event.request.mode === "navigate" ? "./index.html" : event.request)
-      .then((cached) => cached ?? fetch(event.request)),
+    caches.match(event.request).then((cached) => cached ?? fetch(event.request)),
   );
 });

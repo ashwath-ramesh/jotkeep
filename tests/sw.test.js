@@ -22,7 +22,7 @@ test("service worker declares a cache version", () => {
   assert.notEqual(versionMatch, null, "sw.js must define CACHE_VERSION");
   assert.equal(
     versionMatch[1],
-    "jotkeep-v12",
+    "jotkeep-v13",
     "shell changes must ship with a new cache version",
   );
 });
@@ -45,6 +45,7 @@ test("every application-shell file is precached", () => {
   const required = [
     "./",
     "./index.html",
+    "./privacy.html",
     "./manifest.webmanifest",
     "./icons/icon.svg",
     ...readdirSync(join(repoRoot, "src"))
