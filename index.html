@@ -858,6 +858,10 @@
       </div>
       <div class="dialog-content">
         <p id="safety-open-summary" class="dialog-copy file-summary"></p>
+        <p class="dialog-copy warning-card" role="note">
+          Safety Files are not encrypted. Anyone who can access one can read
+          its note titles and content.
+        </p>
         <p id="safety-open-error" class="dialog-error" role="alert" hidden></p>
         <fieldset id="safety-open-options" class="restore-options">
           <legend>Choose how to open this notebook</legend>
@@ -888,15 +892,84 @@
         <button id="safety-conflict-close" class="dialog-close" type="button" aria-label="Close Safety File conflict">×</button>
       </div>
       <div class="dialog-content">
-        <p class="dialog-copy warning-card">Automatic updates are paused so neither copy is silently replaced. Choose which notebook to keep.</p>
+        <p class="dialog-copy warning-card">
+          Automatic updates are paused so neither copy is silently replaced.
+          Choose which notebook to keep.
+        </p>
+        <p class="dialog-copy" role="note">
+          Safety Files are not encrypted. Anyone who can access one can read
+          its note titles and content.
+        </p>
         <p id="safety-conflict-error" class="dialog-error" role="alert" hidden></p>
+        <div id="safety-conflict-choices" class="safety-conflict-choices">
+          <p id="safety-use-file-description" class="dialog-copy">
+            <strong>Use Safety File</strong> replaces the local notes,
+            preferences, and history with the file. JotKeep saves the current
+            local notebook as a restore point first.
+          </p>
+          <p id="safety-overwrite-file-description" class="dialog-copy">
+            <strong>Overwrite with local</strong> replaces the Safety File's
+            notes, preferences, and history with the current local data.
+          </p>
+          <p id="safety-conflict-disconnect-description" class="dialog-copy">
+            <strong>Disconnect</strong> keeps both copies unchanged and stops
+            automatic Safety File updates.
+          </p>
+        </div>
+        <section
+          id="safety-overwrite-confirmation"
+          class="safety-overwrite-confirmation"
+          aria-labelledby="safety-overwrite-confirmation-title"
+          hidden
+        >
+          <h3 id="safety-overwrite-confirmation-title" tabindex="-1">
+            Overwrite the Safety File?
+          </h3>
+          <p id="safety-overwrite-summary" class="dialog-copy warning-card"></p>
+          <p class="dialog-copy">
+            The file's current notes, preferences, and history will be
+            replaced with the local notebook and local history. JotKeep will
+            read the file back before it reports <strong>Backed up</strong>.
+          </p>
+        </section>
       </div>
-      <div class="dialog-actions safety-conflict-actions">
-        <button id="safety-use-file" type="button">Use Safety File</button>
-        <button id="safety-overwrite-file" class="danger-confirm-button" type="button">Overwrite with local</button>
+      <div id="safety-conflict-actions" class="dialog-actions safety-conflict-actions">
+        <button
+          id="safety-use-file"
+          type="button"
+          aria-describedby="safety-use-file-description"
+        >
+          Use Safety File
+        </button>
+        <button
+          id="safety-overwrite-file"
+          class="danger-confirm-button"
+          type="button"
+          aria-describedby="safety-overwrite-file-description"
+        >
+          Overwrite with local
+        </button>
         <span class="dialog-action-spacer"></span>
-        <button id="safety-conflict-disconnect" type="button">Disconnect</button>
+        <button
+          id="safety-conflict-disconnect"
+          type="button"
+          aria-describedby="safety-conflict-disconnect-description"
+        >
+          Disconnect
+        </button>
         <button id="safety-conflict-cancel" type="button">Cancel</button>
+      </div>
+      <div id="safety-overwrite-actions" class="dialog-actions" hidden>
+        <button id="safety-overwrite-back" type="button">Back</button>
+        <span class="dialog-action-spacer"></span>
+        <button id="safety-overwrite-cancel" type="button">Cancel</button>
+        <button
+          id="safety-overwrite-confirm"
+          class="danger-confirm-button"
+          type="button"
+        >
+          Overwrite Safety File
+        </button>
       </div>
     </dialog>
 

@@ -183,6 +183,17 @@ const safetyConflictCancel = document.querySelector("#safety-conflict-cancel");
 const safetyConflictDisconnect = document.querySelector("#safety-conflict-disconnect");
 const safetyUseFile = document.querySelector("#safety-use-file");
 const safetyOverwriteFile = document.querySelector("#safety-overwrite-file");
+const safetyConflictChoices = document.querySelector("#safety-conflict-choices");
+const safetyConflictActions = document.querySelector("#safety-conflict-actions");
+const safetyOverwriteConfirmation = document.querySelector("#safety-overwrite-confirmation");
+const safetyOverwriteConfirmationTitle = document.querySelector(
+  "#safety-overwrite-confirmation-title",
+);
+const safetyOverwriteSummary = document.querySelector("#safety-overwrite-summary");
+const safetyOverwriteActions = document.querySelector("#safety-overwrite-actions");
+const safetyOverwriteBack = document.querySelector("#safety-overwrite-back");
+const safetyOverwriteCancel = document.querySelector("#safety-overwrite-cancel");
+const safetyOverwriteConfirm = document.querySelector("#safety-overwrite-confirm");
 const statusBar = document.querySelector("#status-bar");
 const fullscreenToggle = document.querySelector("#fullscreen-toggle");
 const appearanceDialog = document.querySelector("#appearance-dialog");
@@ -321,6 +332,7 @@ let notebookTransitionPending = false;
 let safetyState = null;
 let pendingSafetyFile = null;
 let safetyFileInputMode = "open";
+let safetyOverwritePending = false;
 
 const directSafetyFilesSupported = supportsDirectSafetyFiles(window);
 const safetyCoordinator = createSafetyFileCoordinator({
@@ -1112,7 +1124,8 @@ async function createDirectSafetyFile() {
     await safetyCoordinator.waitForIdle();
     await safetyCoordinator.create(handle, structuredClone(notesDocument));
     setCommandFeedback(
-      `Created and verified Safety File “${handle.name}”. Automatic updates are connected.`,
+      `Created and verified unencrypted Safety File “${handle.name}”. Anyone with access to the file can read its note titles and content. Automatic updates are connected.`,
+      { important: true },
     );
   } catch (error) {
     if (error?.name !== "AbortError") {
@@ -1134,7 +1147,8 @@ async function downloadSafetyFile() {
     const filename = safetyFileFilename(value.createdAt);
     downloadFile(serialized, "application/json;charset=utf-8", filename);
     setCommandFeedback(
-      `Prepared Safety File download “${filename}”. This browser cannot verify that the downloaded file remains on disk.`,
+      `Prepared unencrypted Safety File download “${filename}”. Anyone with access to the file can read its note titles and content. This browser cannot verify that the downloaded file remains on disk.`,
+      { important: true },
     );
   } catch (error) {
     setCommandFeedback(`Could not prepare Safety File: ${error.message}`, {
@@ -1318,13 +1332,74 @@ safetyOpenConfirm.addEventListener("click", async () => {
 });
 
 function closeSafetyConflictDialog() {
-  if (safetyConflictDialog.open) {
+  if (safetyConflictDialog.open && !safetyOverwritePending) {
     safetyConflictDialog.close();
   }
 }
 
+function showSafetyConflictChoices({ focusOverwrite = false } = {}) {
+  safetyConflictChoices.hidden = false;
+  safetyConflictActions.hidden = false;
+  safetyOverwriteConfirmation.hidden = true;
+  safetyOverwriteActions.hidden = true;
+  safetyOverwriteConfirmationTitle.textContent = "Overwrite the Safety File?";
+  safetyOverwriteSummary.textContent = "";
+  if (focusOverwrite) {
+    safetyOverwriteFile.focus();
+  }
+}
+
+function showSafetyOverwriteConfirmation() {
+  const connection = safetyCoordinator.getConnection();
+  if (!connection) {
+    safetyConflictError.textContent =
+      "The Safety File is no longer connected. Close this dialog and check the Safety File status.";
+    safetyConflictError.hidden = false;
+    return;
+  }
+
+  safetyConflictError.hidden = true;
+  safetyConflictError.textContent = "";
+  safetyConflictChoices.hidden = true;
+  safetyConflictActions.hidden = true;
+  safetyOverwriteConfirmation.hidden = false;
+  safetyOverwriteActions.hidden = false;
+  safetyOverwriteConfirmationTitle.textContent = `Overwrite “${connection.fileName}”?`;
+  safetyOverwriteSummary.textContent =
+    `The current content of “${connection.fileName}” will be removed.`;
+  safetyOverwriteConfirmationTitle.focus();
+}
+
+function setSafetyOverwritePending(pending) {
+  safetyOverwritePending = pending;
+  safetyConflictClose.disabled = pending;
+  safetyOverwriteBack.disabled = pending;
+  safetyOverwriteCancel.disabled = pending;
+  safetyOverwriteConfirm.disabled = pending;
+  safetyOverwriteConfirm.textContent = pending
+    ? "Overwriting…"
+    : "Overwrite Safety File";
+}
+
+function resetSafetyConflictDialog() {
+  setSafetyOverwritePending(false);
+  safetyConflictError.hidden = true;
+  safetyConflictError.textContent = "";
+  showSafetyConflictChoices();
+}
+
 safetyConflictClose.addEventListener("click", closeSafetyConflictDialog);
 safetyConflictCancel.addEventListener("click", closeSafetyConflictDialog);
+safetyOverwriteCancel.addEventListener("click", closeSafetyConflictDialog);
+safetyOverwriteBack.addEventListener("click", () => {
+  showSafetyConflictChoices({ focusOverwrite: true });
+});
+safetyConflictDialog.addEventListener("cancel", (event) => {
+  if (safetyOverwritePending) {
+    event.preventDefault();
+  }
+});
+safetyConflictDialog.addEventListener("close", resetSafetyConflictDialog);
 safetyConflictDisconnect.addEventListener("click", async () => {
   if (await safetyCoordinator.disconnect()) {
     closeSafetyConflictDialog();
@@ -1366,14 +1441,22 @@ safetyUseFile.addEventListener("click", async () => {
     safetyConflictError.hidden = false;
   }
 });
-safetyOverwriteFile.addEventListener("click", async () => {
+safetyOverwriteFile.addEventListener("click", () => {
+  showSafetyOverwriteConfirmation();
+});
+safetyOverwriteConfirm.addEventListener("click", async () => {
   safetyConflictError.hidden = true;
+  safetyConflictError.textContent = "";
+  setSafetyOverwritePending(true);
   if (await safetyCoordinator.overwrite(structuredClone(notesDocument))) {
+    setSafetyOverwritePending(false);
     closeSafetyConflictDialog();
     setCommandFeedback("Overwrote and verified the Safety File with the local notebook.");
   } else {
+    setSafetyOverwritePending(false);
     safetyConflictError.textContent = safetyState.error?.message ?? "Could not overwrite the Safety File.";
     safetyConflictError.hidden = false;
+    safetyOverwriteConfirm.focus();
   }
 });
 
@@ -2112,8 +2195,7 @@ async function executeFileAction(action, trigger = null) {
         }
         break;
       case "resolve-safety":
-        safetyConflictError.hidden = true;
-        safetyConflictError.textContent = "";
+        resetSafetyConflictDialog();
         safetyConflictDialog.showModal();
         break;
       case "disconnect-safety":

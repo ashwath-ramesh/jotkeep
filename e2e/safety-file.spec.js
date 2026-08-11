@@ -5,6 +5,12 @@ async function openFileAction(page, name) {
   return page.getByRole("menuitem", { name });
 }
 
+async function disableStatusBar(page) {
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Status bar" }).click();
+  await expect(page.locator("#status-bar")).toBeHidden();
+}
+
 async function downloadBytes(download) {
   const stream = await download.createReadStream();
   const chunks = [];
@@ -29,10 +35,18 @@ test("manual fallback downloads and restores a complete Safety File", async ({ p
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   await page.locator("#note-list-view").selectOption("compact");
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
+  await disableStatusBar(page);
 
   const downloadPromise = page.waitForEvent("download");
   await (await openFileAction(page, "Download Safety File…")).click();
   const download = await downloadPromise;
+  await expect(page.locator("#status-bar")).toBeVisible();
+  await expect(page.locator("#command-feedback")).toContainText(
+    "unencrypted Safety File",
+  );
+  await expect(page.locator("#command-feedback")).toContainText(
+    "read its note titles and content",
+  );
   const bytes = await downloadBytes(download);
   const value = JSON.parse(bytes.toString("utf8"));
   expect(value.format).toBe("jotkeep-safety-file");
@@ -49,6 +63,9 @@ test("manual fallback downloads and restores a complete Safety File", async ({ p
     mimeType: "application/json",
     buffer: bytes,
   });
+  await expect(page.getByRole("dialog", { name: "Open Safety File" })).toContainText(
+    "Safety Files are not encrypted",
+  );
   await page.getByRole("button", { name: "Replace local notebook" }).click();
 
   await expect(page.locator("#note-title")).toHaveValue("Portable");
@@ -96,9 +113,17 @@ test("connected files update after local autosave and pause on external changes"
     window.showSaveFilePicker = async () => handle;
   });
   await page.goto("/");
+  await disableStatusBar(page);
 
   await (await openFileAction(page, "Create Safety File…")).click();
+  await expect(page.locator("#status-bar")).toBeVisible();
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
+  await expect(page.locator("#command-feedback")).toContainText(
+    "unencrypted Safety File",
+  );
+  await expect(page.locator("#command-feedback")).toContainText(
+    "read its note titles and content",
+  );
   await page.locator("#note").fill("Saved outside the browser");
   await expect(page.locator("#save-state")).toHaveText("Local: Saved");
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
@@ -114,7 +139,52 @@ test("connected files update after local autosave and pause on external changes"
     "Changed outside JotKeep",
   );
   await (await openFileAction(page, "Resolve Safety File conflict…")).click();
+  const conflictDialog = page.getByRole("dialog", { name: "Safety File changed" });
+  await expect(conflictDialog).toContainText("Safety Files are not encrypted");
+  await expect(page.locator("#safety-use-file-description")).toContainText(
+    "replaces the local notes, preferences, and history",
+  );
+  await expect(page.locator("#safety-overwrite-file-description")).toContainText(
+    "replaces the Safety File's notes, preferences, and history",
+  );
+  await expect(page.locator("#safety-conflict-disconnect-description")).toContainText(
+    "keeps both copies unchanged",
+  );
+  const fileBeforeConfirmation = await page.evaluate(() => window.__safetyText);
+
   await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Overwrite “Connected.jotkeep”?" }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.__safetyText)).toBe(fileBeforeConfirmation);
+
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Overwrite with local" })).toBeFocused();
+  expect(await page.evaluate(() => window.__safetyText)).toBe(fileBeforeConfirmation);
+
+  await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(conflictDialog).toBeHidden();
+  expect(await page.evaluate(() => window.__safetyText)).toBe(fileBeforeConfirmation);
+  await expect(page.locator("#safety-file-status")).toContainText(
+    "Changed outside JotKeep",
+  );
+
+  await (await openFileAction(page, "Resolve Safety File conflict…")).click();
+  await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await page.getByRole("button", { name: "Close Safety File conflict" }).click();
+  await expect(conflictDialog).toBeHidden();
+  expect(await page.evaluate(() => window.__safetyText)).toBe(fileBeforeConfirmation);
+
+  await (await openFileAction(page, "Resolve Safety File conflict…")).click();
+  await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await page.keyboard.press("Escape");
+  await expect(conflictDialog).toBeHidden();
+  expect(await page.evaluate(() => window.__safetyText)).toBe(fileBeforeConfirmation);
+
+  await (await openFileAction(page, "Resolve Safety File conflict…")).click();
+  await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await page.getByRole("button", { name: "Overwrite Safety File" }).click();
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
   expect(
     await page.evaluate(() => JSON.parse(window.__safetyText).document.notes[0].content),
@@ -212,6 +282,14 @@ test("a torn Safety File write fails honestly and recovers without touching loca
   );
   await (await openFileAction(page, "Resolve Safety File conflict…")).click();
   await page.getByRole("button", { name: "Overwrite with local" }).click();
+  await page.evaluate(() => {
+    window.__safetyTornWrites = 1;
+  });
+  await page.getByRole("button", { name: "Overwrite Safety File" }).click();
+  await expect(page.locator("#safety-conflict-error")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Overwrite Safety File" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Overwrite Safety File" }).click();
   await expect(page.locator("#safety-file-status")).toContainText("Backed up");
   expect(
     await page.evaluate(() => JSON.parse(window.__safetyText).document.notes[0].content),

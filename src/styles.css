@@ -834,6 +834,31 @@ input[type="checkbox"] {
   align-items: center;
 }
 
+.safety-conflict-choices,
+.safety-overwrite-confirmation {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+
+.safety-conflict-choices .dialog-copy {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--line-strong);
+}
+
+.safety-conflict-choices strong,
+.safety-overwrite-confirmation strong {
+  color: var(--ink);
+}
+
+.safety-overwrite-confirmation h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
 .overflow,
 .toolbar-popup {
   position: relative;

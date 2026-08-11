@@ -177,14 +177,14 @@ requirements that do not apply to this product.
 - [x] Make **Test my backup…** validate a file without changing the notebook.
 - [x] Show the age of the most recently verified external backup.
 - [x] Warn when the verified external backup content is more than seven days old.
-- [ ] State that an unencrypted Safety File contains readable note content.
+- [x] State that an unencrypted Safety File contains readable note content.
 - [x] Update a connected Safety File only after the local save succeeds.
 - [x] Read and verify a connected Safety File after each write.
 - [x] Show **Backed up** only after the read-back verification succeeds.
 - [x] Pause automatic Safety File writes after file permission is lost.
 - [x] Pause automatic writes when another program changes the Safety File.
-- [ ] Explain each Safety File conflict action before the user selects it.
-- [ ] Request explicit confirmation before local data overwrites a Safety File.
+- [x] Explain each Safety File conflict action before the user selects it.
+- [x] Request explicit confirmation before local data overwrites a Safety File.
 - [x] Keep the external file unchanged when the user disconnects it.
 - [x] Provide a Safety File download when direct file access is not available.
 - [ ] Warn before notebook or history size prevents a complete external backup.

@@ -140,7 +140,8 @@ current notebook as a restore point.
 A Safety File has the `.jotkeep` file extension. It contains the current
 notebook and its restore points.
 
-Safety Files use plain JSON. They are not encrypted.
+Safety Files use plain JSON. They are not encrypted. Anyone who can access a
+Safety File can read its note titles and content.
 
 ### Create a connected Safety File
 
@@ -201,12 +202,17 @@ JotKeep pauses automatic updates when another program changes the Safety
 File.
 
 1. Select **File → Resolve Safety File conflict…**.
-2. Select one of the available operations.
+2. Read what each operation changes.
+3. Select one of the available operations.
+4. If you select **Overwrite with local**, review the final warning and select
+   **Overwrite Safety File**.
 
 Use these operation rules:
 
-- Select **Use Safety File** to replace the local notebook.
-- Select **Overwrite with local** to replace the external file.
+- Select **Use Safety File** to save the current local notebook as a restore
+  point and then replace it with the file's notes, preferences, and history.
+- Select **Overwrite with local** to replace the external file's notes,
+  preferences, and history with the current local data.
 - Select **Disconnect** to keep both files unchanged and stop automatic updates.
 
 > WARNING: **Overwrite with local** removes the current content of the Safety

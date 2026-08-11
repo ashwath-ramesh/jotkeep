@@ -20,7 +20,11 @@ test("service worker declares a cache version", () => {
     /const CACHE_VERSION = "([^"]+)";/,
   );
   assert.notEqual(versionMatch, null, "sw.js must define CACHE_VERSION");
-  assert.notEqual(versionMatch[1].trim(), "");
+  assert.equal(
+    versionMatch[1],
+    "jotkeep-v9",
+    "shell changes must ship with a new cache version",
+  );
 });
 
 test("every precached URL exists on disk", () => {
