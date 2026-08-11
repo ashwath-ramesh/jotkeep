@@ -293,13 +293,13 @@ requirements that do not apply to this product.
 
 ## 13. Essential public pages and trust content
 
-- [ ] Publish a privacy page in plain language.
-- [ ] Explain which data stays in browser storage.
-- [ ] Explain when JotKeep can read or write a user-selected file.
-- [ ] Explain how users can remove all local JotKeep data.
-- [ ] State whether the site uses cookies, analytics, or external requests.
-- [ ] Put a last-reviewed date on the privacy page.
-- [ ] Provide a contact method for privacy questions.
+- [x] Publish a privacy page in plain language.
+- [x] Explain which data stays in browser storage.
+- [x] Explain when JotKeep can read or write a user-selected file.
+- [x] Explain how users can remove all local JotKeep data.
+- [x] State whether the site uses cookies, analytics, or external requests.
+- [x] Put a last-reviewed date on the privacy page.
+- [x] Provide a contact method for privacy questions.
 - [ ] Publish a security page in plain language.
 - [ ] Explain the protection limits of browser storage and Safety Files.
 - [ ] Explain that Safety File integrity checks do not provide encryption.

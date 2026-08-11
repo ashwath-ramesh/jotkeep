@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta
+      name="description"
+      content="How JotKeep stores, uses, and removes your local notebook data."
+    />
+    <title>Privacy — JotKeep</title>
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="src/privacy.css" />
+  </head>
+  <body>
+    <header class="public-header">
+      <a class="brand" href="./" aria-label="JotKeep home">JotKeep</a>
+      <a class="app-link" href="./">Open the notepad</a>
+    </header>
+
+    <main class="privacy-page">
+      <header class="page-intro">
+        <p class="eyebrow">Privacy</p>
+        <h1>Your notes stay under your control</h1>
+        <p class="summary">
+          JotKeep works without an account. The application keeps your notebook
+          in this browser and does not send note content to JotKeep or an
+          analytics service.
+        </p>
+        <p class="review-date">
+          <strong>Last reviewed:</strong>
+          <time datetime="2026-08-11">11 August 2026</time>
+        </p>
+      </header>
+
+      <section aria-labelledby="browser-storage-heading">
+        <h2 id="browser-storage-heading">What stays in browser storage</h2>
+        <p>
+          JotKeep stores your notes, note titles, timestamps, active-note
+          selection, list preferences, restore points, backup status, and a
+          bounded recovery journal on this device. Notebook data and history
+          use IndexedDB. Appearance settings, the recovery journal, and your
+          remembered choice to dismiss the first-use guide use local storage.
+        </p>
+        <p>
+          The browser controls this storage. Clearing site data, resetting the
+          browser profile, or removing the browser can erase it. Browser storage
+          is not an external backup.
+        </p>
+      </section>
+
+      <section aria-labelledby="files-heading">
+        <h2 id="files-heading">When JotKeep uses a file you select</h2>
+        <p>
+          JotKeep reads a local file only after you select it to open, test, or
+          restore. It cannot browse other files on your device. A text file is
+          read to create a note. A JSON backup or Safety File is read and
+          validated before JotKeep offers to change the notebook.
+        </p>
+        <p>
+          If you connect a Safety File and grant file access, JotKeep writes the
+          current notebook and restore points to that file after local saves.
+          It reads the file back after each write to verify it. You can
+          disconnect the file at any time. Disconnecting JotKeep does not delete
+          the file.
+        </p>
+        <p>
+          If direct file access is unavailable, JotKeep prepares a browser
+          download instead. Your browser controls where that download is saved.
+        </p>
+      </section>
+
+      <section aria-labelledby="removal-heading">
+        <h2 id="removal-heading">How to remove local JotKeep data</h2>
+        <p>
+          In JotKeep, select <strong>File</strong>, then
+          <strong>Clear all local data…</strong>. After you confirm, JotKeep
+          removes notes, history, preferences, backup status, recovery data, and
+          its remembered Safety File connection from browser storage.
+        </p>
+        <p>
+          To also remove cached application files and site permissions, clear
+          the site data for the JotKeep origin in your browser settings.
+          Downloaded backups, text files, and Safety Files are outside browser
+          storage and are not deleted by either removal method.
+        </p>
+      </section>
+
+      <section aria-labelledby="network-heading">
+        <h2 id="network-heading">Cookies, analytics, and network requests</h2>
+        <p>
+          The JotKeep application code does not set or read cookies. It does not
+          include analytics, advertising, crash reporting, telemetry, or
+          third-party application resources. It makes no automatic requests to
+          third-party origins.
+        </p>
+        <p>
+          The browser requests the application, icon, fonts, and updates from
+          the same JotKeep origin. These requests do not include your note
+          content. Like other websites, the hosting provider receives standard
+          request details, such as the IP address, date, and browser headers,
+          when it sends these files. JotKeep does not automatically send your
+          notebook to an external service.
+        </p>
+      </section>
+
+      <section aria-labelledby="contact-heading">
+        <h2 id="contact-heading">Privacy questions</h2>
+        <p>
+          Ask a privacy question or report an incorrect statement in the
+          <a href="https://github.com/ashwath-ramesh/jotkeep/issues">
+            JotKeep issue tracker</a
+          >. Issues are public, so do not include note content, a backup, or
+          other private information. Following this link opens GitHub, whose
+          own privacy terms apply.
+        </p>
+      </section>
+    </main>
+
+    <footer class="public-footer">
+      <p>Private plain text. No account. No lock-in.</p>
+      <a href="./">Return to JotKeep</a>
+    </footer>
+  </body>
+</html>

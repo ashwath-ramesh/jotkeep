@@ -1,0 +1,206 @@
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/newsreader-latin-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/newsreader-latin-600.woff2") format("woff2");
+}
+
+/* Match the Newsreader metrics while the webfont loads so the large heading
+   and every section below it stay in place during the font swap. */
+@font-face {
+  font-family: "Newsreader-fallback";
+  src: local("Georgia");
+  size-adjust: 96.12%;
+  ascent-override: 76.47%;
+  descent-override: 27.57%;
+  line-gap-override: 0%;
+}
+
+:root {
+  color-scheme: light dark;
+  --page-surface: light-dark(#fbfaf7, #1d1b17);
+  --page-panel: light-dark(#f7f5f1, #17150f);
+  --page-ink: light-dark(#211e19, #ece9e2);
+  --page-muted-ink: light-dark(rgb(33 30 25 / 0.7), rgb(251 250 247 / 0.68));
+  --page-line: light-dark(rgb(33 30 25 / 0.14), rgb(251 250 247 / 0.13));
+  --page-accent: light-dark(#405c73, #a6bfd2);
+  --page-focus: light-dark(#211e19, #ece9e2);
+  --font-ui:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-writing:
+    "Newsreader", "Newsreader-fallback", "Iowan Old Style", Charter, Georgia,
+    serif;
+
+  background: var(--page-panel);
+  color: var(--page-ink);
+  font-family: var(--font-ui);
+  line-height: 1.65;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page-surface);
+}
+
+a {
+  color: var(--page-accent);
+  font-weight: 650;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-thickness: 0.14em;
+}
+
+a:focus-visible {
+  border-radius: 0.15rem;
+  outline: 2px solid var(--page-focus);
+  outline-offset: 3px;
+}
+
+.public-header,
+.public-footer {
+  display: flex;
+  width: min(100% - 2rem, 72rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-inline: auto;
+}
+
+.public-header {
+  min-height: 4.5rem;
+  border-bottom: 1px solid var(--page-line);
+}
+
+.brand {
+  color: var(--page-ink);
+  font-family: var(--font-writing);
+  font-size: 1.4rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.app-link {
+  font-size: 0.875rem;
+}
+
+.privacy-page {
+  width: min(100% - 2rem, 46rem);
+  margin: 0 auto;
+  padding: clamp(3rem, 8vw, 6rem) 0;
+}
+
+.page-intro {
+  margin-bottom: 4rem;
+}
+
+.eyebrow,
+.review-date {
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--page-accent);
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  font-family: var(--font-writing);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  line-height: 1.02;
+}
+
+.summary {
+  max-width: 58ch;
+  margin: 1.5rem 0 1rem;
+  color: var(--page-muted-ink);
+  font-size: clamp(1.05rem, 3vw, 1.25rem);
+}
+
+.review-date {
+  margin: 0;
+  color: var(--page-muted-ink);
+}
+
+.privacy-page section {
+  padding: 2.25rem 0;
+  border-top: 1px solid var(--page-line);
+}
+
+h2 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+.privacy-page section p {
+  margin: 0.75rem 0 0;
+}
+
+.privacy-page section p:first-of-type {
+  margin-top: 0;
+}
+
+.public-footer {
+  padding-block: 1.5rem 2.5rem;
+  border-top: 1px solid var(--page-line);
+  color: var(--page-muted-ink);
+  font-size: 0.8125rem;
+}
+
+.public-footer p {
+  margin: 0;
+}
+
+@media (max-width: 32rem) {
+  .public-header,
+  .public-footer {
+    align-items: flex-start;
+  }
+
+  .public-footer {
+    flex-direction: column;
+  }
+
+  .privacy-page {
+    padding-top: 3.5rem;
+  }
+}
+
+@media (forced-colors: active) {
+  a:focus-visible {
+    outline-color: Highlight;
+  }
+}
