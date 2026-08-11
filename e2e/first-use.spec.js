@@ -54,6 +54,14 @@ test("a fresh notebook explains privacy, storage, and external backups before ed
 
   await page.reload();
   await expect(guide).toBeHidden();
+
+  const backupHelp = page.getByRole("button", { name: "Backup help" });
+  await backupHelp.click();
+  await expect(
+    page.getByRole("dialog", { name: "Back up your notebook" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(backupHelp).toBeFocused();
 });
 
 test("the first-use guide can be dismissed before editing", async ({ page }) => {

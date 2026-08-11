@@ -22,7 +22,7 @@ test("service worker declares a cache version", () => {
   assert.notEqual(versionMatch, null, "sw.js must define CACHE_VERSION");
   assert.equal(
     versionMatch[1],
-    "jotkeep-v11",
+    "jotkeep-v12",
     "shell changes must ship with a new cache version",
   );
 });

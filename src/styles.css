@@ -612,6 +612,7 @@ input[type="checkbox"] {
   color: var(--warning);
 }
 
+.backup-help,
 .theme-toggle,
 .fullscreen-toggle {
   flex: 0 0 auto;
@@ -623,6 +624,14 @@ input[type="checkbox"] {
   line-height: 1;
 }
 
+.backup-help {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.backup-help:hover,
+.backup-help:focus-visible,
 .theme-toggle:hover,
 .theme-toggle:focus-visible,
 .fullscreen-toggle:hover,

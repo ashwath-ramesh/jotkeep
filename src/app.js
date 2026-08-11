@@ -127,6 +127,7 @@ const firstUseGuideClose = document.querySelector("#first-use-guide-close");
 const firstUseBackupOptions = document.querySelector(
   "#first-use-backup-options",
 );
+const backupHelp = document.querySelector("#backup-help");
 const backupGuideDialog = document.querySelector("#backup-guide-dialog");
 const backupGuideClose = document.querySelector("#backup-guide-close");
 const backupGuideNotNow = document.querySelector("#backup-guide-not-now");
@@ -1013,6 +1014,7 @@ firstUseGuideClose.addEventListener("click", () => {
 firstUseBackupOptions.addEventListener("click", () => {
   openBackupGuide(firstUseBackupOptions);
 });
+backupHelp.addEventListener("click", () => openBackupGuide(backupHelp));
 backupGuideClose.addEventListener("click", () => closeBackupGuide());
 backupGuideNotNow.addEventListener("click", () => closeBackupGuide());
 backupGuideShowOptions.addEventListener("click", () => {
