@@ -251,11 +251,12 @@ granted and reports storage, quota, and migration problems.
 - `manifest.webmanifest` and `icons/icon.svg` make the app installable.
 - The design system behind the interface is documented in
   [DESIGN.md](DESIGN.md).
-- The interface has a light theme and a dark theme. By default the browser
-  selects one with the `prefers-color-scheme` media query. The toggle in the
-  title bar overrides this with a fixed light or dark theme. The choice is
-  stored in `localStorage` in this browser only.
-- The editor uses the Newsreader typeface. The two subsetted font files
+- The interface has system, light, and dark color modes. The title-bar toggle
+  cycles through them, and the Appearance dialog provides an explicit choice.
+  Color and editor-appearance settings use a separate, versioned `localStorage`
+  record in this browser only. They are not notebook or backup data.
+- The editor defaults to the Newsreader typeface and can instead use the
+  system sans-serif or monospace stack. The two subsetted Newsreader files
   (about 46 KB in total) are served from the `fonts/` directory in this
   repository. The app requests no file from any other origin.
 
@@ -434,16 +435,16 @@ Acceptance criteria:
 
 Formatting changes the appearance of the editor, not the stored plain text.
 
-- [ ] Toggle word wrap
-- [ ] Toggle the status bar
-- [ ] Enter and exit fullscreen mode
-- [ ] Choose the font family, size, weight, style, and line spacing
-- [ ] Reset appearance settings to the defaults
-- [ ] Persist preferences separately from note content
-- [ ] Add light, dark, and system color modes
-- [ ] Add documented keyboard shortcuts and a searchable command palette
-- [ ] Add a print view that hides the application chrome
-- [ ] Support save to PDF through the browser print dialog
+- [x] Toggle word wrap
+- [x] Toggle the status bar
+- [x] Enter and exit fullscreen mode
+- [x] Choose the font family, size, weight, style, and line spacing
+- [x] Reset appearance settings to the defaults
+- [x] Persist preferences separately from note content
+- [x] Add light, dark, and system color modes
+- [x] Add documented keyboard shortcuts and a searchable command palette
+- [x] Add a print view that hides the application chrome
+- [x] Support save to PDF through the browser print dialog
 
 Acceptance criteria:
 
@@ -538,6 +539,11 @@ record. Metadata records keep the active-note selection, preferences, note
 order, backup status, and verified-external-copy status. The old version 2
 `localStorage` document is only a migration source.
 
+The document preferences below control notebook sorting and list presentation,
+so they remain portable in backups and Safety Files. Editor appearance uses the
+separate browser-local `jotkeep.appearance.v1` record and does not change this
+document format.
+
 ```json
 {
   "version": 2,
@@ -596,11 +602,13 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 │   ├── app.js             # initialization and event wiring
 │   ├── autosave.js        # debounce, flush, and save-state transitions
 │   ├── backup.js          # backup format, validation, filenames, and merge
+│   ├── commands.js        # searchable application-command metadata
 │   ├── editor.js          # selection and text-editing commands
 │   ├── find-replace.js    # literal matching and replacement helpers
 │   ├── insert.js          # insertion palettes and date-time formatting
 │   ├── indexeddb-storage.js # async adapter, transactions, and migration
 │   ├── notes.js           # note operations, filtering, and sorting
+│   ├── preferences.js     # browser-local appearance validation and storage
 │   ├── safety-file-format.js # .jotkeep schema and validation
 │   ├── safety-file.js     # file access, verification, sync, and conflicts
 │   ├── snapshots.js       # deduplicated history, checksums, and retention
@@ -609,10 +617,12 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
 ├── tests/
 │   ├── autosave.test.js
 │   ├── backup.test.js
+│   ├── commands.test.js
 │   ├── editor.test.js
 │   ├── find-replace.test.js
 │   ├── insert.test.js
 │   ├── notes.test.js
+│   ├── preferences.test.js
 │   ├── safety-file-format.test.js
 │   ├── safety-file.test.js
 │   ├── snapshots.test.js
@@ -622,6 +632,7 @@ behavior uses the Node test runner. Recovery workflows use Playwright:
     ├── backup.spec.js
     ├── history.spec.js
     ├── offline.spec.js
+    ├── polish.spec.js
     ├── safety-file.spec.js
     └── storage.spec.js
 ```
@@ -641,11 +652,12 @@ browser or assistive-technology shortcuts unnecessarily.
 | Open text file | `Cmd/Ctrl + O` |
 | Download note | `Cmd/Ctrl + S` |
 | Print | `Cmd/Ctrl + P` |
+| Command palette | `Cmd/Ctrl + /` |
 | Undo / redo | `Cmd/Ctrl + Z` / `Cmd/Ctrl + Shift + Z` |
 | Find | `Cmd/Ctrl + F` |
 | Find and replace | `Cmd/Ctrl + H` |
 | Select all | `Cmd/Ctrl + A` |
-| Fullscreen | `F11` only when it does not conflict with the browser |
+| Fullscreen | Visible control or command palette; `Escape` exits (`F11` stays browser-controlled) |
 | Close dialog or menu | `Escape` |
 
 When the application intercepts a browser shortcut, it must complete the

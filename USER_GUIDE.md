@@ -25,7 +25,7 @@ On a small screen, select **More** to find the file and editor commands.
 4. Wait until the status shows **Local: Saved**.
 
 JotKeep saves changes after you stop typing. The status bar shows the word and
-character counts.
+character counts when the status bar is visible.
 
 The browser spellchecker operates in the editor. Browser settings control the
 spellchecker language.
@@ -306,6 +306,58 @@ this sequence:
 2. Light theme
 3. Dark theme
 
+You can also select a mode directly in **View → Appearance…**. System mode
+follows the operating-system or browser color preference.
+
+## Change the editor appearance
+
+Select **View → Appearance…**. You can select these properties for the note
+body:
+
+- Newsreader, system sans-serif, or system monospace font
+- Font size
+- Regular or semibold weight
+- Normal or italic style
+- Line spacing
+
+Changes apply to every note and stay in this browser after a reload. They do
+not change note text, text-file downloads, JSON backups, Safety Files, or note
+timestamps. Select **Reset to defaults** to restore the original appearance.
+
+Use **View → Word wrap** to let long lines fit the editor width or to keep each
+line on one horizontal row. Printed output always wraps to the paper width.
+
+Use **View → Status bar** to hide or show routine save, backup, count, and
+storage information. JotKeep shows the bar temporarily if a local save or
+storage operation fails.
+
+## Use fullscreen mode
+
+Select the fullscreen button in the title bar or **View → Enter fullscreen**.
+The browser must permit the request. Select the visible exit button or press
+`Escape` to leave fullscreen. The browser controls `F11` separately.
+
+## Use the command palette
+
+Select **Commands** or press `Ctrl/Command + /`. Type one or more words to
+search file, edit, insert, view, backup, history, and storage actions. Use the
+arrow keys to select a command and press `Enter` to run it. Press `Escape` to
+close the palette. Commands that remove data still open their normal
+confirmation window.
+
+## Print or save a note as PDF
+
+1. Open the note.
+2. Select **File → Print note…** or press `Ctrl/Command + P`.
+3. Select a printer, or select the browser's **Save as PDF** destination.
+4. Complete the browser print operation.
+
+The print view contains the complete title and body. It does not contain the
+notes panel, menus, toolbar, status bar, or other application controls. It uses
+the selected editor typography, always wraps long lines, and prints black text
+on white paper. Browser print settings control optional page headers and
+footers.
+
 ## Clear all local data
 
 > WARNING: This operation removes local notes, history, preferences, backup
@@ -324,14 +376,20 @@ Use `Ctrl` on Windows and Linux. Use `Command` on macOS.
 
 | Operation | Shortcut |
 | --- | --- |
+| New note | `Ctrl/Command + N` |
 | Open a text file | `Ctrl/Command + O` |
 | Download the active note | `Ctrl/Command + S` |
+| Print the active note | `Ctrl/Command + P` |
+| Open the command palette | `Ctrl/Command + /` |
 | Find | `Ctrl/Command + F` |
 | Find and replace | `Ctrl/Command + H` |
 | Undo | `Ctrl/Command + Z` |
 | Redo | `Ctrl/Command + Shift + Z` |
 | Select all | `Ctrl/Command + A` |
 | Close a window or menu | `Escape` |
+
+Use the fullscreen button or command palette to enter fullscreen. `Escape`
+exits it. JotKeep does not override the browser's `F11` behavior.
 
 ## File limits
 

@@ -13,6 +13,12 @@ import {
 } from "./backup.js";
 import { clearEditor, countText, createEditorCommands } from "./editor.js";
 import {
+  COMMAND_CATALOG,
+  commandById,
+  formatShortcut,
+  searchCommands,
+} from "./commands.js";
+import {
   currentMatchIndex,
   findAdjacentMatch,
   findMatches,
@@ -60,11 +66,14 @@ import {
   supportsDirectSafetyFiles,
 } from "./safety-file.js";
 import { SNAPSHOT_KINDS, restoreNoteFromSnapshot } from "./snapshots.js";
+import {
+  createAppearanceStore,
+} from "./preferences.js";
 
 const AUTOSAVE_DELAY_MS = 500;
 const BACKUP_STATUS_REFRESH_MS = 60 * 1000;
 const MOBILE_BREAKPOINT = "(max-width: 48rem)";
-const TOOLBAR_BREAKPOINT = "(max-width: 68rem)";
+const TOOLBAR_BREAKPOINT = "(max-width: 75rem)";
 const SAFETY_PILL_LABELS = Object.freeze({
   [SAFETY_FILE_STATES.MANUAL_ONLY]: "Manual backups",
   [SAFETY_FILE_STATES.PENDING]: "Pending",
@@ -83,6 +92,7 @@ const safetyFileStatus = document.querySelector("#safety-file-status");
 const safetyFilePill = document.querySelector("#safety-file-pill");
 const noteCountFooter = document.querySelector("#note-count-footer");
 const commandFeedback = document.querySelector("#command-feedback");
+const appAnnouncer = document.querySelector("#app-announcer");
 const wordCount = document.querySelector("#word-count");
 const characterCount = document.querySelector("#character-count");
 const backupStatus = document.querySelector("#backup-status");
@@ -96,6 +106,9 @@ const insertPopup = insertButton.closest(".toolbar-popup");
 const fileButton = document.querySelector("#file-button");
 const fileMenu = document.querySelector("#file-menu");
 const filePopup = fileButton.closest(".toolbar-popup");
+const viewButton = document.querySelector("#view-button");
+const viewMenu = document.querySelector("#view-menu");
+const viewPopup = viewButton.closest(".toolbar-popup");
 const appShell = document.querySelector(".app-shell");
 const sidebar = document.querySelector("#notes-sidebar");
 const sidebarToggle = document.querySelector("#sidebar-toggle");
@@ -167,6 +180,25 @@ const safetyConflictCancel = document.querySelector("#safety-conflict-cancel");
 const safetyConflictDisconnect = document.querySelector("#safety-conflict-disconnect");
 const safetyUseFile = document.querySelector("#safety-use-file");
 const safetyOverwriteFile = document.querySelector("#safety-overwrite-file");
+const statusBar = document.querySelector("#status-bar");
+const fullscreenToggle = document.querySelector("#fullscreen-toggle");
+const appearanceDialog = document.querySelector("#appearance-dialog");
+const appearanceClose = document.querySelector("#appearance-close");
+const appearanceDone = document.querySelector("#appearance-done");
+const appearanceColorMode = document.querySelector("#appearance-color-mode");
+const appearanceFontFamily = document.querySelector("#appearance-font-family");
+const appearanceFontSize = document.querySelector("#appearance-font-size");
+const appearanceFontWeight = document.querySelector("#appearance-font-weight");
+const appearanceFontStyle = document.querySelector("#appearance-font-style");
+const appearanceLineSpacing = document.querySelector("#appearance-line-spacing");
+const commandPaletteDialog = document.querySelector("#command-palette-dialog");
+const commandPaletteClose = document.querySelector("#command-palette-close");
+const commandPaletteSearch = document.querySelector("#command-palette-search");
+const commandPaletteStatus = document.querySelector("#command-palette-status");
+const commandPaletteResults = document.querySelector("#command-palette-results");
+const printView = document.querySelector("#print-view");
+const printTitle = document.querySelector("#print-title");
+const printBody = document.querySelector("#print-body");
 const narrowLayout = window.matchMedia(MOBILE_BREAKPOINT);
 const compactToolbar = window.matchMedia(TOOLBAR_BREAKPOINT);
 const timestampFormatter = new Intl.DateTimeFormat(undefined, {
@@ -174,41 +206,27 @@ const timestampFormatter = new Intl.DateTimeFormat(undefined, {
   timeStyle: "short",
 });
 
-const THEME_STORAGE_KEY = "jotkeep.theme.v1";
-const THEME_SEQUENCE = ["auto", "light", "dark"];
-const THEME_ICONS = Object.freeze({ auto: "◐", light: "☀", dark: "☾" });
+const THEME_SEQUENCE = ["system", "light", "dark"];
+const THEME_ICONS = Object.freeze({ system: "◐", light: "☀", dark: "☾" });
 const THEME_LABELS = Object.freeze({
-  auto: "System theme",
+  system: "System theme",
   light: "Light theme",
   dark: "Dark theme",
 });
 const themeToggle = document.querySelector("#theme-toggle");
 const themeColorMetas = document.querySelectorAll('meta[name="theme-color"]');
+const appearanceStore = createAppearanceStore();
+let appearance = appearanceStore.load().preferences;
 
 function currentTheme() {
-  let stored = null;
-  try {
-    stored = localStorage.getItem(THEME_STORAGE_KEY);
-  } catch {
-    return "auto";
-  }
-  return stored === "light" || stored === "dark" ? stored : "auto";
+  return appearance.colorMode;
 }
 
 function applyTheme(mode) {
-  if (mode === "auto") {
+  if (mode === "system") {
     delete document.documentElement.dataset.theme;
   } else {
     document.documentElement.dataset.theme = mode;
-  }
-  try {
-    if (mode === "auto") {
-      localStorage.removeItem(THEME_STORAGE_KEY);
-    } else {
-      localStorage.setItem(THEME_STORAGE_KEY, mode);
-    }
-  } catch {
-    /* The theme still applies for this visit. */
   }
   const next =
     THEME_SEQUENCE[(THEME_SEQUENCE.indexOf(mode) + 1) % THEME_SEQUENCE.length];
@@ -217,16 +235,61 @@ function applyTheme(mode) {
   themeToggle.setAttribute("aria-label", label);
   themeToggle.title = label;
   for (const meta of themeColorMetas) {
-    const dark = mode === "auto" ? meta.media.includes("dark") : mode === "dark";
+    const dark = mode === "system" ? meta.media.includes("dark") : mode === "dark";
     meta.content = dark ? "#17150f" : "#f7f5f1";
   }
 }
 
+function syncAppearanceControls() {
+  appearanceColorMode.value = appearance.colorMode;
+  appearanceFontFamily.value = appearance.fontFamily;
+  appearanceFontSize.value = String(appearance.fontSize);
+  appearanceFontWeight.value = String(appearance.fontWeight);
+  appearanceFontStyle.value = appearance.fontStyle;
+  appearanceLineSpacing.value = String(appearance.lineSpacing);
+
+  for (const button of document.querySelectorAll('[data-app-command="view.word-wrap"]')) {
+    button.setAttribute("aria-checked", String(appearance.wordWrap));
+  }
+  for (const button of document.querySelectorAll('[data-app-command="view.status-bar"]')) {
+    button.setAttribute("aria-checked", String(appearance.statusBar));
+  }
+}
+
+function applyAppearance() {
+  const root = document.documentElement;
+  root.dataset.fontFamily = appearance.fontFamily;
+  root.dataset.fontSize = String(appearance.fontSize);
+  root.dataset.fontWeight = String(appearance.fontWeight);
+  root.dataset.fontStyle = appearance.fontStyle;
+  root.dataset.lineSpacing = String(appearance.lineSpacing);
+  root.dataset.wordWrap = String(appearance.wordWrap);
+  root.dataset.statusBar = String(appearance.statusBar);
+  note.wrap = appearance.wordWrap ? "soft" : "off";
+  applyTheme(appearance.colorMode);
+  syncAppearanceControls();
+}
+
+function updateAppearance(changes, { announce = true } = {}) {
+  const result = appearanceStore.update(changes);
+  appearance = result.preferences;
+  applyAppearance();
+  if (!result.persisted && announce) {
+    setCommandFeedback(
+      "Appearance changed for this visit, but this browser could not save the preference.",
+      { important: true },
+    );
+  }
+  return result.persisted;
+}
+
 themeToggle.addEventListener("click", () => {
   const sequenceIndex = THEME_SEQUENCE.indexOf(currentTheme());
-  applyTheme(THEME_SEQUENCE[(sequenceIndex + 1) % THEME_SEQUENCE.length]);
+  updateAppearance({
+    colorMode: THEME_SEQUENCE[(sequenceIndex + 1) % THEME_SEQUENCE.length],
+  });
 });
-applyTheme(currentTheme());
+applyAppearance();
 
 const storageService = createBrowserStorageService();
 const loadedNotes = await storageService.initialize();
@@ -391,8 +454,13 @@ function updateCounts() {
   );
 }
 
-function setCommandFeedback(message) {
+function setCommandFeedback(message, { important = false } = {}) {
   commandFeedback.textContent = message;
+  appAnnouncer.textContent = message;
+  statusBar.classList.toggle(
+    "has-important-feedback",
+    Boolean(message) && important,
+  );
 }
 
 function renderSafetyFileStatus() {
@@ -531,6 +599,7 @@ function renderStorageStatus() {
 
   storageStatus.textContent = message;
   storageStatus.title = message;
+  statusBar.classList.toggle("is-critical", Boolean(storageIssue));
 }
 
 function reportStorageIssue(error) {
@@ -660,6 +729,7 @@ const autosave = createAutosave({
     if (result?.snapshotError) {
       setCommandFeedback(
         `${result.snapshotError.message} Current notes were still saved.`,
+        { important: true },
       );
     }
   },
@@ -717,6 +787,7 @@ function warnWhenApproachingBackupLimit() {
     warnedAboutBackupLimit = true;
     setCommandFeedback(
       "This notebook is approaching the 25 MiB backup limit. Download large notes as text files or split the notebook soon.",
+      { important: true },
     );
   } else if (estimatedSize < BACKUP_LIMIT_REARM_CHARACTERS) {
     warnedAboutBackupLimit = false;
@@ -778,6 +849,7 @@ function closeMenu({ returnFocus = false } = {}) {
 function openMenu() {
   closeInsertMenu();
   closeFileMenu();
+  closeViewMenu();
   commandMenu.hidden = false;
   moreButton.setAttribute("aria-expanded", "true");
   commandMenu.querySelector('[role="menuitem"]').focus();
@@ -799,6 +871,7 @@ function closeInsertMenu({ returnFocus = false } = {}) {
 function openInsertMenu() {
   closeMenu();
   closeFileMenu();
+  closeViewMenu();
   insertMenu.hidden = false;
   insertButton.setAttribute("aria-expanded", "true");
   insertMenu.querySelector('[role="menuitem"]').focus();
@@ -820,15 +893,39 @@ function closeFileMenu({ returnFocus = false } = {}) {
 function openFileMenu() {
   closeMenu();
   closeInsertMenu();
+  closeViewMenu();
   fileMenu.hidden = false;
   fileButton.setAttribute("aria-expanded", "true");
   fileMenu.querySelector('[role="menuitem"]').focus();
+}
+
+function closeViewMenu({ returnFocus = false } = {}) {
+  if (viewMenu.hidden) {
+    return;
+  }
+
+  viewMenu.hidden = true;
+  viewButton.setAttribute("aria-expanded", "false");
+
+  if (returnFocus) {
+    viewButton.focus();
+  }
+}
+
+function openViewMenu() {
+  closeMenu();
+  closeInsertMenu();
+  closeFileMenu();
+  viewMenu.hidden = false;
+  viewButton.setAttribute("aria-expanded", "true");
+  viewMenu.querySelector('[role^="menuitem"]').focus();
 }
 
 function closeAllMenus() {
   closeMenu();
   closeInsertMenu();
   closeFileMenu();
+  closeViewMenu();
 }
 
 moreButton.addEventListener("click", () => {
@@ -855,9 +952,17 @@ fileButton.addEventListener("click", () => {
   }
 });
 
+viewButton.addEventListener("click", () => {
+  if (viewMenu.hidden) {
+    openViewMenu();
+  } else {
+    closeViewMenu({ returnFocus: true });
+  }
+});
+
 function addMenuKeyboardHandling(menu, close) {
   menu.addEventListener("keydown", (event) => {
-    const items = [...menu.querySelectorAll('[role="menuitem"]')].filter(
+    const items = [...menu.querySelectorAll('[role^="menuitem"]')].filter(
       (item) => !item.hidden && !item.disabled,
     );
     const currentIndex = items.indexOf(document.activeElement);
@@ -896,6 +1001,7 @@ function addMenuKeyboardHandling(menu, close) {
 addMenuKeyboardHandling(commandMenu, closeMenu);
 addMenuKeyboardHandling(insertMenu, closeInsertMenu);
 addMenuKeyboardHandling(fileMenu, closeFileMenu);
+addMenuKeyboardHandling(viewMenu, closeViewMenu);
 
 document.addEventListener("pointerdown", (event) => {
   if (!commandMenu.hidden && !overflow.contains(event.target)) {
@@ -906,6 +1012,9 @@ document.addEventListener("pointerdown", (event) => {
   }
   if (!fileMenu.hidden && !filePopup.contains(event.target)) {
     closeFileMenu();
+  }
+  if (!viewMenu.hidden && !viewPopup.contains(event.target)) {
+    closeViewMenu();
   }
 });
 
@@ -976,7 +1085,9 @@ async function chooseDirectSafetyFile() {
     showSafetyOpenDialog(read, handle);
   } catch (error) {
     if (error?.name !== "AbortError") {
-      setCommandFeedback(`Could not open Safety File: ${error.message}`);
+      setCommandFeedback(`Could not open Safety File: ${error.message}`, {
+        important: true,
+      });
     }
   }
 }
@@ -996,7 +1107,9 @@ async function createDirectSafetyFile() {
     );
   } catch (error) {
     if (error?.name !== "AbortError") {
-      setCommandFeedback(`Could not create Safety File: ${error.message}`);
+      setCommandFeedback(`Could not create Safety File: ${error.message}`, {
+        important: true,
+      });
     }
   }
 }
@@ -1015,7 +1128,9 @@ async function downloadSafetyFile() {
       `Prepared Safety File download “${filename}”. This browser cannot verify that the downloaded file remains on disk.`,
     );
   } catch (error) {
-    setCommandFeedback(`Could not prepare Safety File: ${error.message}`);
+    setCommandFeedback(`Could not prepare Safety File: ${error.message}`, {
+      important: true,
+    });
   }
 }
 
@@ -1033,6 +1148,7 @@ async function verifySafetyFile() {
     } else {
       setCommandFeedback(
         safetyState.error?.message ?? "Could not verify the connected Safety File.",
+        { important: true },
       );
     }
     return;
@@ -1051,7 +1167,9 @@ async function verifySafetyFile() {
       );
     } catch (error) {
       if (error?.name !== "AbortError") {
-        setCommandFeedback(`Could not verify Safety File: ${error.message}`);
+        setCommandFeedback(`Could not verify Safety File: ${error.message}`, {
+          important: true,
+        });
       }
     }
   } else {
@@ -1078,7 +1196,10 @@ safetyFileInput.addEventListener("change", async () => {
       showSafetyOpenDialog(read);
     }
   } catch (error) {
-    setCommandFeedback(`Could not ${safetyFileInputMode === "verify" ? "verify" : "open"} Safety File: ${error.message}`);
+    setCommandFeedback(
+      `Could not ${safetyFileInputMode === "verify" ? "verify" : "open"} Safety File: ${error.message}`,
+      { important: true },
+    );
   } finally {
     safetyFileInputMode = "open";
   }
@@ -1171,6 +1292,7 @@ safetyOpenConfirm.addEventListener("click", async () => {
     ) {
       setCommandFeedback(
         `Merged “${read.fileName}” locally, but the Safety File was not updated: ${safetyState.error?.message ?? "check its backup status"}`,
+        { important: true },
       );
     } else {
       setCommandFeedback(
@@ -1280,6 +1402,7 @@ async function importTextFile(file, generation) {
     saved
       ? `Imported “${file.name}” as a new note.`
       : `Imported “${file.name}” for this session, but browser storage is unavailable.`,
+    { important: !saved },
   );
 }
 
@@ -1296,7 +1419,9 @@ textFileInput.addEventListener("change", async () => {
     await importTextFile(file, generation);
   } catch (error) {
     if (generation === textImportGeneration) {
-      setCommandFeedback(`Could not import text: ${error.message}`);
+      setCommandFeedback(`Could not import text: ${error.message}`, {
+        important: true,
+      });
     }
   }
 });
@@ -1334,9 +1459,12 @@ async function exportJsonBackup() {
       metadataSaved
         ? `Requested JSON backup download “${filename}”. Confirm the download finished and keep the file somewhere safe.`
         : `Requested JSON backup download “${filename}”, but this browser could not remember its date.`,
+      { important: !metadataSaved },
     );
   } catch (error) {
-    setCommandFeedback(`Could not create backup: ${error.message}`);
+    setCommandFeedback(`Could not create backup: ${error.message}`, {
+      important: true,
+    });
   }
 }
 
@@ -1353,16 +1481,19 @@ async function requestBrowserPersistence() {
     case PERSISTENCE_STATES.DENIED:
       setCommandFeedback(
         "The browser did not grant persistent storage. Editing and browser saves still work.",
+        { important: true },
       );
       break;
     case PERSISTENCE_STATES.UNSUPPORTED:
       setCommandFeedback(
         "This browser does not offer a persistent-storage request. Keep JSON backups somewhere safe.",
+        { important: true },
       );
       break;
     default:
       setCommandFeedback(
         "JotKeep could not request persistent storage. Editing and browser saves still work.",
+        { important: true },
       );
       break;
   }
@@ -1470,6 +1601,7 @@ async function reportTestedSafetyFile(read, label) {
   });
   setCommandFeedback(
     `Test passed for “${label}”: ${pluralizedCount(read.value.document.notes.length, "note", "notes")} and ${pluralizedCount(read.value.history.snapshots.length, "restore point", "restore points")} are recoverable${remembered ? "." : ", but this browser could not remember the test date."}`,
+    { important: !remembered },
   );
 }
 
@@ -1486,7 +1618,9 @@ async function testConnectedBackup() {
       await safetyCoordinator.verify(notesDocument);
     }
   } catch (error) {
-    setCommandFeedback(`Backup test failed: ${error.message}`);
+    setCommandFeedback(`Backup test failed: ${error.message}`, {
+      important: true,
+    });
   }
 }
 
@@ -1511,12 +1645,15 @@ backupTestFileInput.addEventListener("change", async () => {
       });
       setCommandFeedback(
         `Test passed for “${file.name}”: ${pluralizedCount(backup.document.notes.length, "note", "notes")} are recoverable${remembered ? "." : ", but this browser could not remember the test date."}`,
+        { important: !remembered },
       );
       return;
     }
     throw new TypeError("Choose a .jotkeep Safety File or a .json JotKeep backup.");
   } catch (error) {
-    setCommandFeedback(`Backup test failed: ${error.message}`);
+    setCommandFeedback(`Backup test failed: ${error.message}`, {
+      important: true,
+    });
   }
 });
 
@@ -1896,9 +2033,11 @@ clearDataConfirm.addEventListener("click", async () => {
   }
 
   clearRecoveryJournal();
-  // The dialog promises to remove preferences, which includes the manual
-  // theme override.
-  applyTheme("auto");
+  // Appearance is device-local rather than part of the notebook document,
+  // but the dialog promises to remove every JotKeep preference in this browser.
+  const clearedAppearance = appearanceStore.clear();
+  appearance = clearedAppearance.preferences;
+  applyAppearance();
   textImportGeneration += 1;
   autosave.reset(SAVE_STATES.CLEARED);
   canSafelySave = true;
@@ -1914,14 +2053,18 @@ clearDataConfirm.addEventListener("click", async () => {
   renderStorageStatus();
   showActiveNote({ focus: "body" });
   closeClearDataDialog();
-  setCommandFeedback("All JotKeep data was cleared from this browser.");
+  setCommandFeedback(
+    clearedAppearance.persisted
+      ? "All JotKeep data was cleared from this browser."
+      : "Notes were cleared, but this browser could not remove its stored appearance preference.",
+    { important: !clearedAppearance.persisted },
+  );
 });
 
-for (const button of document.querySelectorAll("[data-file-action]")) {
-  button.addEventListener("click", async () => {
-    closeAllMenus();
+async function executeFileAction(action, trigger = null) {
+  closeAllMenus();
 
-    switch (button.dataset.fileAction) {
+  switch (action) {
       case "open-text":
         chooseFile(textFileInput);
         break;
@@ -1955,6 +2098,7 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
           setCommandFeedback(
             safetyState.error?.message ??
               "Safety File access was not granted. Local saves continue normally.",
+            { important: true },
           );
         }
         break;
@@ -1967,19 +2111,27 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
         if (await safetyCoordinator.disconnect()) {
           setCommandFeedback("Disconnected the Safety File. The external file was not changed.");
         } else {
-          setCommandFeedback(safetyState.error.message);
+          setCommandFeedback(safetyState.error.message, { important: true });
         }
         break;
       case "export-backup":
         await exportJsonBackup();
         break;
       case "restore-backup":
-        restoreReturnFocus = button.closest("#file-menu") ? fileButton : moreButton;
+        restoreReturnFocus = trigger?.closest("#file-menu")
+          ? fileButton
+          : trigger?.closest("#command-menu")
+            ? moreButton
+            : trigger ?? fileButton;
         chooseFile(backupFileInput);
         break;
       case "browse-history":
         await openHistoryDialog(
-          button.closest("#file-menu") ? fileButton : moreButton,
+          trigger?.closest("#file-menu")
+            ? fileButton
+            : trigger?.closest("#command-menu")
+              ? moreButton
+              : trigger ?? fileButton,
         );
         break;
       case "persist-storage":
@@ -1987,10 +2139,19 @@ for (const button of document.querySelectorAll("[data-file-action]")) {
         break;
       case "clear-data":
         openClearDataDialog(
-          button.closest("#file-menu") ? fileButton : moreButton,
+          trigger?.closest("#file-menu")
+            ? fileButton
+            : trigger?.closest("#command-menu")
+              ? moreButton
+              : trigger ?? fileButton,
         );
         break;
-    }
+  }
+}
+
+for (const button of document.querySelectorAll("[data-file-action]")) {
+  button.addEventListener("click", async () => {
+    await executeFileAction(button.dataset.fileAction, button);
   });
 }
 
@@ -2309,6 +2470,424 @@ for (const button of document.querySelectorAll('[data-action="clear"]')) {
   button.addEventListener("click", clearActiveNote);
 }
 
+let appearanceReturnFocus = null;
+
+function openAppearanceDialog(trigger = null) {
+  closeAllMenus();
+  appearanceReturnFocus = trigger?.closest("#command-menu")
+    ? moreButton
+    : trigger?.closest("#view-menu")
+      ? viewButton
+      : trigger;
+  syncAppearanceControls();
+  if (!appearanceDialog.open) {
+    appearanceDialog.showModal();
+  }
+  appearanceColorMode.focus();
+}
+
+function closeAppearanceDialog() {
+  if (appearanceDialog.open) {
+    appearanceDialog.close();
+  }
+}
+
+appearanceClose.addEventListener("click", closeAppearanceDialog);
+appearanceDone.addEventListener("click", closeAppearanceDialog);
+appearanceDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeAppearanceDialog();
+});
+appearanceDialog.addEventListener("close", () => {
+  appearanceReturnFocus?.focus();
+  appearanceReturnFocus = null;
+});
+
+appearanceColorMode.addEventListener("change", () => {
+  updateAppearance({ colorMode: appearanceColorMode.value });
+});
+appearanceFontFamily.addEventListener("change", () => {
+  updateAppearance({ fontFamily: appearanceFontFamily.value });
+});
+appearanceFontSize.addEventListener("change", () => {
+  updateAppearance({ fontSize: Number(appearanceFontSize.value) });
+});
+appearanceFontWeight.addEventListener("change", () => {
+  updateAppearance({ fontWeight: Number(appearanceFontWeight.value) });
+});
+appearanceFontStyle.addEventListener("change", () => {
+  updateAppearance({ fontStyle: appearanceFontStyle.value });
+});
+appearanceLineSpacing.addEventListener("change", () => {
+  updateAppearance({ lineSpacing: Number(appearanceLineSpacing.value) });
+});
+
+function resetAppearance() {
+  const result = appearanceStore.reset();
+  appearance = result.preferences;
+  applyAppearance();
+  setCommandFeedback(
+    result.persisted
+      ? "Appearance reset to the defaults."
+      : "Appearance reset for this visit, but this browser could not save the preference.",
+    { important: !result.persisted },
+  );
+}
+
+function setFullscreenControls(active) {
+  const label = active ? "Exit fullscreen" : "Enter fullscreen";
+  fullscreenToggle.setAttribute("aria-label", label);
+  fullscreenToggle.setAttribute("aria-pressed", String(active));
+  fullscreenToggle.title = label;
+  for (const button of document.querySelectorAll('[data-app-command="view.fullscreen"]')) {
+    if (button === fullscreenToggle) {
+      continue;
+    }
+    button.textContent = label;
+  }
+}
+
+async function toggleFullscreen() {
+  closeAllMenus();
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else if (typeof document.documentElement.requestFullscreen === "function") {
+      await document.documentElement.requestFullscreen();
+    } else {
+      setCommandFeedback("Fullscreen is unavailable in this browser.", {
+        important: true,
+      });
+    }
+  } catch {
+    setCommandFeedback("The browser did not allow JotKeep to enter fullscreen.", {
+      important: true,
+    });
+  }
+}
+
+document.addEventListener("fullscreenchange", () => {
+  setFullscreenControls(Boolean(document.fullscreenElement));
+});
+document.addEventListener("fullscreenerror", () => {
+  setCommandFeedback("The browser could not change fullscreen mode.", {
+    important: true,
+  });
+});
+setFullscreenControls(Boolean(document.fullscreenElement));
+
+function preparePrintView() {
+  printTitle.textContent = titleInput.value.trim() || "Untitled Note";
+  printBody.textContent = note.value;
+  printView.setAttribute("aria-hidden", "false");
+}
+
+function clearPrintView() {
+  printView.setAttribute("aria-hidden", "true");
+  printTitle.textContent = "";
+  printBody.textContent = "";
+}
+
+function printActiveNote() {
+  closeAllMenus();
+  preparePrintView();
+  window.print();
+}
+
+window.addEventListener("beforeprint", preparePrintView);
+window.addEventListener("afterprint", clearPrintView);
+
+const FILE_COMMAND_ACTIONS = Object.freeze({
+  "file.open-text": "open-text",
+  "file.download-text": "download-text",
+  "safety.create": "create-safety",
+  "safety.open": "open-safety",
+  "safety.download": "download-safety",
+  "safety.verify": "verify-safety",
+  "backup.test": "test-backup",
+  "safety.grant": "grant-safety",
+  "safety.resolve": "resolve-safety",
+  "safety.disconnect": "disconnect-safety",
+  "backup.export": "export-backup",
+  "backup.restore": "restore-backup",
+  "history.browse": "browse-history",
+  "storage.persist": "persist-storage",
+  "storage.clear": "clear-data",
+});
+
+function isCommandAvailable(command) {
+  switch (command.id) {
+    case "safety.create":
+      return directSafetyFilesSupported;
+    case "safety.grant":
+      return safetyState?.kind === SAFETY_FILE_STATES.NEEDS_PERMISSION;
+    case "safety.resolve":
+      return safetyState?.kind === SAFETY_FILE_STATES.EXTERNAL_CHANGE;
+    case "safety.disconnect":
+      return safetyCoordinator.getConnection() !== null;
+    default:
+      return true;
+  }
+}
+
+async function executeAppCommand(commandId, { trigger = null } = {}) {
+  const command = commandById(commandId);
+  if (!command || !isCommandAvailable(command)) {
+    setCommandFeedback("That command is not available right now.", {
+      important: true,
+    });
+    return false;
+  }
+
+  if (FILE_COMMAND_ACTIONS[commandId]) {
+    await executeFileAction(FILE_COMMAND_ACTIONS[commandId], trigger);
+    return true;
+  }
+
+  if (commandId.startsWith("edit.") && commandId !== "edit.clear") {
+    closeAllMenus();
+    await editorCommands.execute(commandId.slice("edit.".length));
+    return true;
+  }
+
+  switch (commandId) {
+    case "note.new":
+      await createSavedNote();
+      break;
+    case "file.print":
+      printActiveNote();
+      break;
+    case "edit.clear":
+      clearActiveNote();
+      break;
+    case "find.open":
+      openFindDialog(false);
+      break;
+    case "find.replace":
+      openFindDialog(true);
+      break;
+    case "insert.date-time":
+      closeAllMenus();
+      editorCommands.insertText(formatCurrentDateTime());
+      break;
+    case "insert.symbols":
+      openCharacterPicker("symbols");
+      break;
+    case "insert.emoji":
+      openCharacterPicker("emoji");
+      break;
+    case "view.sidebar":
+      setSidebarOpen(!sidebarOpen, {
+        returnFocus: sidebarOpen,
+        focusPanel: !sidebarOpen,
+      });
+      break;
+    case "view.appearance":
+      openAppearanceDialog(trigger);
+      break;
+    case "view.word-wrap":
+      closeAllMenus();
+      updateAppearance({ wordWrap: !appearance.wordWrap });
+      break;
+    case "view.status-bar":
+      closeAllMenus();
+      updateAppearance({ statusBar: !appearance.statusBar });
+      break;
+    case "view.fullscreen":
+      await toggleFullscreen();
+      break;
+    case "appearance.reset":
+      closeAllMenus();
+      resetAppearance();
+      break;
+    case "theme.system":
+    case "theme.light":
+    case "theme.dark":
+      updateAppearance({ colorMode: commandId.slice("theme.".length) });
+      break;
+    default:
+      setCommandFeedback("That command is not available right now.", {
+        important: true,
+      });
+      return false;
+  }
+  return true;
+}
+
+const isMac = /Mac|iPhone|iPad|iPod/u.test(navigator.platform);
+let paletteCommands = [];
+let paletteSelection = 0;
+let paletteReturnFocus = null;
+
+function paletteCommandLabel(command) {
+  if (command.id === "view.fullscreen") {
+    return document.fullscreenElement ? "Exit fullscreen" : "Enter fullscreen";
+  }
+  return command.label;
+}
+
+function renderCommandPalette() {
+  paletteCommands = searchCommands(commandPaletteSearch.value, {
+    commands: COMMAND_CATALOG,
+    isAvailable: isCommandAvailable,
+    isMac,
+  });
+  paletteSelection = Math.max(
+    0,
+    Math.min(paletteSelection, paletteCommands.length - 1),
+  );
+  const fragment = document.createDocumentFragment();
+
+  for (const [index, command] of paletteCommands.entries()) {
+    const button = document.createElement("button");
+    const label = document.createElement("span");
+    const title = document.createElement("span");
+    const category = document.createElement("span");
+    const shortcut = document.createElement("span");
+    button.type = "button";
+    button.id = `command-palette-option-${index}`;
+    button.className = "command-palette-option";
+    button.dataset.commandId = command.id;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(index === paletteSelection));
+    button.tabIndex = -1;
+    label.className = "command-palette-label";
+    title.textContent = paletteCommandLabel(command);
+    category.className = "command-palette-category";
+    category.textContent = command.category;
+    shortcut.className = "command-palette-shortcut";
+    shortcut.textContent = formatShortcut(command.shortcut, { isMac });
+    label.append(title, category);
+    button.append(label, shortcut);
+    fragment.append(button);
+  }
+
+  if (paletteCommands.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "command-palette-empty";
+    empty.textContent = "No matching commands.";
+    fragment.append(empty);
+    commandPaletteSearch.removeAttribute("aria-activedescendant");
+  } else {
+    commandPaletteSearch.setAttribute(
+      "aria-activedescendant",
+      `command-palette-option-${paletteSelection}`,
+    );
+  }
+
+  commandPaletteResults.replaceChildren(fragment);
+  commandPaletteStatus.textContent = `${paletteCommands.length} ${
+    paletteCommands.length === 1 ? "command" : "commands"
+  }`;
+  commandPaletteResults
+    .querySelector('[aria-selected="true"]')
+    ?.scrollIntoView({ block: "nearest" });
+}
+
+function openCommandPalette(trigger = null) {
+  closeAllMenus();
+  const blockingDialog = document.querySelector("dialog[open]");
+  if (blockingDialog && blockingDialog !== commandPaletteDialog) {
+    setCommandFeedback("Close the open dialog before using the command palette.", {
+      important: true,
+    });
+    return;
+  }
+  paletteReturnFocus = trigger?.closest?.("#command-menu")
+    ? moreButton
+    : trigger ?? document.activeElement;
+  commandPaletteSearch.value = "";
+  paletteSelection = 0;
+  renderCommandPalette();
+  if (!commandPaletteDialog.open) {
+    commandPaletteDialog.showModal();
+  }
+  commandPaletteSearch.focus();
+}
+
+function closeCommandPalette() {
+  if (commandPaletteDialog.open) {
+    commandPaletteDialog.close();
+  }
+}
+
+async function runPaletteCommand(commandId) {
+  const returnFocus = paletteReturnFocus;
+  closeCommandPalette();
+  await executeAppCommand(commandId, { trigger: returnFocus });
+}
+
+commandPaletteSearch.addEventListener("input", () => {
+  paletteSelection = 0;
+  renderCommandPalette();
+});
+commandPaletteSearch.addEventListener("keydown", (event) => {
+  if (paletteCommands.length === 0 && event.key !== "Escape") {
+    return;
+  }
+  switch (event.key) {
+    case "ArrowDown":
+      paletteSelection = (paletteSelection + 1) % paletteCommands.length;
+      break;
+    case "ArrowUp":
+      paletteSelection =
+        (paletteSelection - 1 + paletteCommands.length) % paletteCommands.length;
+      break;
+    case "Home":
+      paletteSelection = 0;
+      break;
+    case "End":
+      paletteSelection = paletteCommands.length - 1;
+      break;
+    case "Enter":
+      event.preventDefault();
+      void runPaletteCommand(paletteCommands[paletteSelection].id);
+      return;
+    case "Escape":
+      return;
+    default:
+      return;
+  }
+  event.preventDefault();
+  renderCommandPalette();
+});
+commandPaletteResults.addEventListener("pointermove", (event) => {
+  const option = event.target.closest("[data-command-id]");
+  if (!option) return;
+  const index = paletteCommands.findIndex(
+    (command) => command.id === option.dataset.commandId,
+  );
+  if (index !== -1 && index !== paletteSelection) {
+    paletteSelection = index;
+    renderCommandPalette();
+  }
+});
+commandPaletteResults.addEventListener("click", (event) => {
+  const option = event.target.closest("[data-command-id]");
+  if (option) {
+    void runPaletteCommand(option.dataset.commandId);
+  }
+});
+commandPaletteClose.addEventListener("click", closeCommandPalette);
+commandPaletteDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeCommandPalette();
+});
+commandPaletteDialog.addEventListener("close", () => {
+  paletteReturnFocus?.focus();
+  paletteReturnFocus = null;
+});
+
+for (const button of document.querySelectorAll("[data-open-command-palette]")) {
+  button.addEventListener("click", () => openCommandPalette(button));
+}
+
+for (const button of document.querySelectorAll("[data-app-command]")) {
+  button.addEventListener("click", () => {
+    void executeAppCommand(button.dataset.appCommand, { trigger: button });
+  });
+}
+
 function setSidebarOpen(open, { returnFocus = false, focusPanel = false } = {}) {
   /* The inline head script may have hidden the drawer pre-paint; from the
      first call onward the hidden attribute below is the single source of
@@ -2364,36 +2943,61 @@ document.addEventListener("keydown", (event) => {
   if (
     (event.metaKey || event.ctrlKey) &&
     !event.altKey &&
+    shortcutKey === "/"
+  ) {
+    event.preventDefault();
+    openCommandPalette(document.activeElement);
+    return;
+  }
+
+  if (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
     !event.shiftKey
   ) {
+    if (shortcutKey === "n") {
+      event.preventDefault();
+      void executeAppCommand("note.new");
+      return;
+    }
+
     if (shortcutKey === "o") {
       event.preventDefault();
-      closeAllMenus();
-      chooseFile(textFileInput);
+      void executeAppCommand("file.open-text");
       return;
     }
 
     if (shortcutKey === "s") {
       event.preventDefault();
-      closeAllMenus();
-      downloadActiveNote();
+      void executeAppCommand("file.download-text");
+      return;
+    }
+
+    if (shortcutKey === "p") {
+      event.preventDefault();
+      void executeAppCommand("file.print");
       return;
     }
 
     if (shortcutKey === "f") {
       event.preventDefault();
-      openFindDialog(false);
+      void executeAppCommand("find.open");
       return;
     }
 
     if (shortcutKey === "h") {
       event.preventDefault();
-      openFindDialog(true);
+      void executeAppCommand("find.replace");
       return;
     }
   }
 
-  if (event.key === "Escape" && sidebarOpen && narrowLayout.matches) {
+  if (
+    event.key === "Escape" &&
+    !document.fullscreenElement &&
+    sidebarOpen &&
+    narrowLayout.matches
+  ) {
     event.preventDefault();
     setSidebarOpen(false, { returnFocus: true });
   }
@@ -2435,6 +3039,7 @@ async function selectSavedNote(noteId) {
 }
 
 async function createSavedNote() {
+  closeAllMenus();
   if (notebookTransitionPending) {
     return;
   }
@@ -2507,6 +3112,7 @@ async function deleteSavedNote(noteId, trigger) {
       reportStorageIssue(error);
       setCommandFeedback(
         `Could not delete “${displayNoteTitle(savedNote)}” because a recovery checkpoint could not be saved.`,
+        { important: true },
       );
       return;
     }

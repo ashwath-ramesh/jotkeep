@@ -14,18 +14,21 @@ its two values side by side.
 
 ## Typography
 
-Three type families, with a fixed division of labor:
+Three type families, with a default division of labor:
 
-- **Writing is serif.** The note body, note title, and dialog titles use
-  Newsreader (self-hosted, `fonts/`).
+- **Writing starts as serif.** The note body defaults to Newsreader
+  (self-hosted, `fonts/`). A browser-local appearance preference can instead
+  use the system sans-serif or monospace stack and can change its size, weight,
+  style, and line spacing. The note title and dialog titles stay Newsreader.
 - **UI is grotesk.** Buttons, menus, inputs, and labels use the system
   sans-serif stack.
 - **Receipts are mono.** Data the app reports — timestamps, word counts,
   save and backup status, file names, match counts, the sidebar footer —
   uses the monospace stack.
 
-Do not mix these roles. A control never uses the serif; note text never
-uses the sans-serif.
+Controls keep the UI stack regardless of editor appearance. Status and receipt
+text keep the monospace stack. The print view follows the selected note-body
+typography but forces black text on white paper.
 
 ## Surfaces
 

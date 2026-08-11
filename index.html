@@ -8,7 +8,7 @@
          (tests/csp.test.js) recomputes it so the two cannot drift apart. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'sha256-Ulbs8PtRABFkmol36p71fUMqkn5eWFuFGa6bOwySE70='; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self' 'sha256-OrdbR46ADLvodgsnJSX74OtWpNAMwXli+RW6kTutYK8='; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta
       name="description"
@@ -27,12 +27,44 @@
     />
     <script>
       try {
+        var storedAppearance = JSON.parse(
+          localStorage.getItem("jotkeep.appearance.v1") || "null",
+        );
         var storedTheme = localStorage.getItem("jotkeep.theme.v1");
-        if (storedTheme === "light" || storedTheme === "dark") {
-          document.documentElement.dataset.theme = storedTheme;
+        var bootTheme =
+          storedAppearance && storedAppearance.version === 1
+            ? storedAppearance.colorMode
+            : storedTheme;
+        if (bootTheme === "light" || bootTheme === "dark") {
+          document.documentElement.dataset.theme = bootTheme;
+        }
+        if (storedAppearance && storedAppearance.version === 1) {
+          var bootOptions = {
+            fontFamily: ["newsreader", "sans", "mono"],
+            fontSize: [14, 16, 18, 20, 24, 28],
+            fontWeight: [400, 600],
+            fontStyle: ["normal", "italic"],
+            lineSpacing: [1.4, 1.6, 1.85, 2.1],
+          };
+          for (var bootKey in bootOptions) {
+            if (bootOptions[bootKey].includes(storedAppearance[bootKey])) {
+              document.documentElement.dataset[bootKey] =
+                String(storedAppearance[bootKey]);
+            }
+          }
+          if (typeof storedAppearance.wordWrap === "boolean") {
+            document.documentElement.dataset.wordWrap = String(
+              storedAppearance.wordWrap,
+            );
+          }
+          if (typeof storedAppearance.statusBar === "boolean") {
+            document.documentElement.dataset.statusBar = String(
+              storedAppearance.statusBar,
+            );
+          }
         }
       } catch (error) {
-        /* Storage access can fail; fall back to the system theme. */
+        /* Storage access can fail; fall back to the default appearance. */
       }
       /* Pre-paint sidebar state so the desktop grid never shifts and the
          mobile drawer never flashes; app.js takes over after init. */
@@ -162,6 +194,17 @@
           >
             ◐
           </button>
+          <button
+            id="fullscreen-toggle"
+            class="fullscreen-toggle"
+            type="button"
+            data-app-command="view.fullscreen"
+            aria-label="Enter fullscreen"
+            aria-pressed="false"
+            title="Enter fullscreen"
+          >
+            ⛶
+          </button>
         </header>
 
         <div class="toolbar" role="group" aria-label="Editing commands">
@@ -182,6 +225,9 @@
                 </button>
                 <button type="button" role="menuitem" data-file-action="download-text">
                   Download note
+                </button>
+                <button type="button" role="menuitem" data-app-command="file.print">
+                  Print note…
                 </button>
                 <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="create-safety">
@@ -232,6 +278,35 @@
                 </button>
               </div>
             </div>
+            <div class="toolbar-popup">
+              <button
+                id="view-button"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="view-menu"
+              >
+                View
+              </button>
+              <div id="view-menu" class="command-menu view-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-app-command="view.appearance">
+                  Appearance…
+                </button>
+                <button type="button" role="menuitemcheckbox" data-app-command="view.word-wrap">
+                  Word wrap
+                </button>
+                <button type="button" role="menuitemcheckbox" data-app-command="view.status-bar">
+                  Status bar
+                </button>
+                <button type="button" role="menuitem" data-app-command="view.fullscreen">
+                  Enter fullscreen
+                </button>
+                <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-app-command="appearance.reset">
+                  Reset appearance
+                </button>
+              </div>
+            </div>
             <span class="toolbar-separator" aria-hidden="true"></span>
             <button type="button" data-command="undo">Undo</button>
             <button type="button" data-command="redo">Redo</button>
@@ -267,6 +342,7 @@
               </div>
             </div>
             <span class="toolbar-spacer"></span>
+            <button type="button" data-open-command-palette>Commands</button>
             <button class="danger-button" type="button" data-action="clear">
               Clear
             </button>
@@ -286,11 +362,18 @@
                 More
               </button>
               <div id="command-menu" class="command-menu" role="menu" hidden>
+                <button type="button" role="menuitem" data-open-command-palette>
+                  Command palette…
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="open-text">
                   Open text file…
                 </button>
                 <button type="button" role="menuitem" data-file-action="download-text">
                   Download note
+                </button>
+                <button type="button" role="menuitem" data-app-command="file.print">
+                  Print note…
                 </button>
                 <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-file-action="create-safety">
@@ -346,6 +429,22 @@
                   Find and replace…
                 </button>
                 <span class="menu-separator" role="separator"></span>
+                <button type="button" role="menuitem" data-app-command="view.appearance">
+                  Appearance…
+                </button>
+                <button type="button" role="menuitemcheckbox" data-app-command="view.word-wrap">
+                  Word wrap
+                </button>
+                <button type="button" role="menuitemcheckbox" data-app-command="view.status-bar">
+                  Status bar
+                </button>
+                <button type="button" role="menuitem" data-app-command="view.fullscreen">
+                  Enter fullscreen
+                </button>
+                <button type="button" role="menuitem" data-app-command="appearance.reset">
+                  Reset appearance
+                </button>
+                <span class="menu-separator" role="separator"></span>
                 <button type="button" role="menuitem" data-command="cut">Cut</button>
                 <button type="button" role="menuitem" data-command="copy">
                   Copy
@@ -395,15 +494,15 @@
           ></textarea>
         </section>
 
-        <footer class="status-bar">
+        <footer id="status-bar" class="status-bar">
           <!-- Save and Safety File states change too often for polite live
                regions; they stay visual-only and settled outcomes announce
-               through #command-feedback. -->
+               through #app-announcer. -->
           <span id="save-state" data-saved="false">Local: Loading…</span>
           <span id="safety-file-status">
             Safety File: Checking…
           </span>
-          <span id="command-feedback" role="status" aria-live="polite"></span>
+          <span id="command-feedback"></span>
           <span id="backup-status">No recoverable external backup verified</span>
           <span id="offline-status"></span>
           <button id="update-ready" class="update-ready-button" type="button" hidden>
@@ -420,6 +519,13 @@
         </footer>
       </section>
     </main>
+
+    <span id="app-announcer" class="visually-hidden" role="status" aria-live="polite"></span>
+
+    <article id="print-view" class="print-view" aria-hidden="true">
+      <h1 id="print-title"></h1>
+      <pre id="print-body"></pre>
+    </article>
 
     <input id="text-file-input" type="file" accept=".txt,text/plain" hidden />
     <input
@@ -440,6 +546,116 @@
       accept=".jotkeep,.json,application/json"
       hidden
     />
+
+    <dialog
+      id="appearance-dialog"
+      class="app-dialog appearance-dialog"
+      aria-labelledby="appearance-dialog-title"
+    >
+      <div class="dialog-header">
+        <h2 id="appearance-dialog-title">Appearance</h2>
+        <button
+          id="appearance-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Close appearance settings"
+        >
+          ×
+        </button>
+      </div>
+      <div class="dialog-content appearance-fields">
+        <label for="appearance-color-mode">Color mode</label>
+        <select id="appearance-color-mode">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+
+        <label for="appearance-font-family">Font family</label>
+        <select id="appearance-font-family">
+          <option value="newsreader">Newsreader</option>
+          <option value="sans">System sans serif</option>
+          <option value="mono">System monospace</option>
+        </select>
+
+        <label for="appearance-font-size">Font size</label>
+        <select id="appearance-font-size">
+          <option value="14">14</option>
+          <option value="16">16</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+          <option value="24">24</option>
+          <option value="28">28</option>
+        </select>
+
+        <label for="appearance-font-weight">Font weight</label>
+        <select id="appearance-font-weight">
+          <option value="400">Regular</option>
+          <option value="600">Semibold</option>
+        </select>
+
+        <label for="appearance-font-style">Font style</label>
+        <select id="appearance-font-style">
+          <option value="normal">Normal</option>
+          <option value="italic">Italic</option>
+        </select>
+
+        <label for="appearance-line-spacing">Line spacing</label>
+        <select id="appearance-line-spacing">
+          <option value="1.4">Compact</option>
+          <option value="1.6">Standard</option>
+          <option value="1.85">Comfortable</option>
+          <option value="2.1">Spacious</option>
+        </select>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" data-app-command="appearance.reset">
+          Reset to defaults
+        </button>
+        <span class="dialog-action-spacer"></span>
+        <button id="appearance-done" class="primary-button" type="button">
+          Done
+        </button>
+      </div>
+    </dialog>
+
+    <dialog
+      id="command-palette-dialog"
+      class="app-dialog command-palette-dialog"
+      aria-labelledby="command-palette-title"
+    >
+      <div class="dialog-header">
+        <h2 id="command-palette-title">Commands</h2>
+        <button
+          id="command-palette-close"
+          class="dialog-close"
+          type="button"
+          aria-label="Close command palette"
+        >
+          ×
+        </button>
+      </div>
+      <div class="command-palette-content">
+        <label class="visually-hidden" for="command-palette-search">
+          Search commands
+        </label>
+        <input
+          id="command-palette-search"
+          class="command-palette-search"
+          type="search"
+          placeholder="Search commands…"
+          autocomplete="off"
+          aria-controls="command-palette-results"
+        />
+        <p id="command-palette-status" class="command-palette-status" role="status"></p>
+        <div
+          id="command-palette-results"
+          class="command-palette-results"
+          role="listbox"
+          aria-label="Available commands"
+        ></div>
+      </div>
+    </dialog>
 
     <dialog
       id="find-dialog"

@@ -124,6 +124,8 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   await page.locator("#note").fill("Two\nlines");
   await page.locator("#note-sort").selectOption("title");
   await page.locator("#note-list-view").selectOption("compact");
+  await page.locator("#theme-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
   const downloadPromise = page.waitForEvent("download");
   await (await openFileAction(page, "Export JSON backup…")).click();
@@ -153,6 +155,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   await expect(page.locator("#backup-status")).toHaveText(
     "No recoverable external backup verified",
   );
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
 
   await page.locator("#backup-file-input").setInputFiles({
     name: download.suggestedFilename(),
@@ -167,6 +170,7 @@ test("exports, cancels clear, clears all local data, and restores by replacement
   await expect(page.locator("#note-sort")).toHaveValue("title");
   await expect(page.locator("#note-list-view")).toHaveValue("compact");
   await expect(page.locator("#notes-list > li")).toHaveCount(2);
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
 });
 
 test("invalid restore changes nothing and merge preserves local context", async ({

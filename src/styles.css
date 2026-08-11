@@ -102,6 +102,11 @@
     "Newsreader", "Newsreader-fallback", "Iowan Old Style", Charter, Georgia,
     serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --editor-font-family: var(--font-serif);
+  --editor-font-size: 1.125rem;
+  --editor-font-weight: 400;
+  --editor-font-style: normal;
+  --editor-line-height: 1.85;
 
   font-family: var(--font-ui);
   background: var(--panel);
@@ -115,6 +120,54 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+}
+
+:root[data-font-family="sans"] {
+  --editor-font-family: var(--font-ui);
+}
+
+:root[data-font-family="mono"] {
+  --editor-font-family: var(--font-mono);
+}
+
+:root[data-font-size="14"] {
+  --editor-font-size: 0.875rem;
+}
+
+:root[data-font-size="16"] {
+  --editor-font-size: 1rem;
+}
+
+:root[data-font-size="20"] {
+  --editor-font-size: 1.25rem;
+}
+
+:root[data-font-size="24"] {
+  --editor-font-size: 1.5rem;
+}
+
+:root[data-font-size="28"] {
+  --editor-font-size: 1.75rem;
+}
+
+:root[data-font-weight="600"] {
+  --editor-font-weight: 600;
+}
+
+:root[data-font-style="italic"] {
+  --editor-font-style: italic;
+}
+
+:root[data-line-spacing="1.4"] {
+  --editor-line-height: 1.4;
+}
+
+:root[data-line-spacing="1.6"] {
+  --editor-line-height: 1.6;
+}
+
+:root[data-line-spacing="2.1"] {
+  --editor-line-height: 2.1;
 }
 
 * {
@@ -533,7 +586,8 @@ input[type="checkbox"] {
   color: var(--warning);
 }
 
-.theme-toggle {
+.theme-toggle,
+.fullscreen-toggle {
   flex: 0 0 auto;
   min-width: 2.25rem;
   min-height: 2.25rem;
@@ -544,7 +598,9 @@ input[type="checkbox"] {
 }
 
 .theme-toggle:hover,
-.theme-toggle:focus-visible {
+.theme-toggle:focus-visible,
+.fullscreen-toggle:hover,
+.fullscreen-toggle:focus-visible {
   color: var(--ink);
 }
 
@@ -627,13 +683,23 @@ input[type="checkbox"] {
   outline: 0;
   resize: none;
   overflow-y: auto;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   background: var(--surface);
   color: var(--editor-ink);
   caret-color: var(--accent);
-  font-family: var(--font-serif);
-  font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.15625rem);
-  line-height: 1.85;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  font-style: var(--editor-font-style);
+  font-weight: var(--editor-font-weight);
+  line-height: var(--editor-line-height);
   letter-spacing: 0;
+}
+
+:root[data-word-wrap="false"] .notepad {
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: pre;
 }
 
 .notepad:focus-visible {
@@ -659,6 +725,17 @@ input[type="checkbox"] {
   color: var(--muted-ink);
   font-family: var(--font-mono);
   font-size: 0.6875rem;
+}
+
+:root[data-status-bar="false"]
+  .status-bar:not(.is-critical):not(.has-important-feedback) {
+  display: none;
+}
+
+:root[data-status-bar="false"]
+  .status-bar.has-important-feedback:not(.is-critical)
+  > :not(#command-feedback) {
+  display: none;
 }
 
 #save-state {
@@ -762,6 +839,12 @@ input[type="checkbox"] {
   width: 15rem;
 }
 
+.view-menu {
+  right: auto;
+  left: 0;
+  width: 13rem;
+}
+
 .command-menu button {
   width: 100%;
   min-height: 2.5rem;
@@ -795,6 +878,88 @@ input[type="checkbox"] {
 
 .app-dialog::backdrop {
   background: rgb(0 0 0 / 0.35);
+}
+
+.appearance-dialog {
+  width: min(30rem, calc(100vw - 2rem));
+}
+
+.appearance-fields {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.appearance-fields select,
+.command-palette-search {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.625rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.command-palette-dialog {
+  width: min(38rem, calc(100vw - 2rem));
+}
+
+.command-palette-content {
+  padding: 1rem;
+}
+
+.command-palette-status {
+  min-height: 1.25rem;
+  margin: 0.5rem 0;
+  color: var(--quiet-ink);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.command-palette-results {
+  display: grid;
+  max-height: min(55vh, 28rem);
+  gap: 0.125rem;
+  overflow-y: auto;
+}
+
+.command-palette-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.45rem 0.625rem;
+  text-align: left;
+}
+
+.command-palette-option[aria-selected="true"] {
+  background: var(--accent-wash);
+}
+
+.command-palette-label {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.command-palette-category,
+.command-palette-shortcut {
+  color: var(--quiet-ink);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
+.command-palette-empty {
+  margin: 1rem 0;
+  color: var(--muted-ink);
+  text-align: center;
+}
+
+.print-view {
+  display: none;
 }
 
 .dialog-header {
@@ -1084,7 +1249,7 @@ input[type="checkbox"] {
   display: none;
 }
 
-@media (max-width: 68rem) {
+@media (max-width: 75rem) {
   .desktop-commands {
     display: none;
   }
@@ -1198,7 +1363,6 @@ input[type="checkbox"] {
 
   .notepad {
     padding: 1.25rem 1.5rem;
-    line-height: 1.7;
   }
 
   .status-bar {
@@ -1232,6 +1396,58 @@ input[type="checkbox"] {
   }
 }
 
+@media (max-width: 30rem) {
+  .appearance-fields {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .appearance-fields select {
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media print {
+  @page {
+    margin: 18mm;
+  }
+
+  html,
+  body {
+    min-height: 0;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  body > :not(.print-view) {
+    display: none !important;
+  }
+
+  .print-view {
+    display: block;
+    color: #000000;
+    font-family: var(--editor-font-family);
+    font-size: var(--editor-font-size);
+    font-style: var(--editor-font-style);
+    font-weight: var(--editor-font-weight);
+    line-height: var(--editor-line-height);
+  }
+
+  .print-view h1 {
+    margin: 0 0 1.25em;
+    font-size: 1.5em;
+    line-height: 1.2;
+  }
+
+  .print-view pre {
+    font: inherit;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: normal;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   button,
   .title-input {
@@ -1250,6 +1466,10 @@ input[type="checkbox"] {
   }
 
   .note-list-item.is-active {
+    outline: 2px solid Highlight;
+  }
+
+  .command-palette-option[aria-selected="true"] {
     outline: 2px solid Highlight;
   }
 
