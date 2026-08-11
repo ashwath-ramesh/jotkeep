@@ -1,0 +1,328 @@
+# JotKeep website master checklist
+
+Use this checklist to build and verify the JotKeep website. Mark an item
+complete only after the site has the specified behavior and the applicable
+tests pass. A task can describe behavior that already exists. The empty box
+means that the behavior still needs verification.
+
+All tasks use controlled English from
+[ASD-STE100 Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf).
+Each task has one principal action. Exact interface labels are in bold.
+
+## Scope
+
+This checklist covers the JotKeep application, its dialogs and transient
+states, its print view, and its essential public pages. It also covers narrow
+screens, offline use, installation, accessibility, recovery, privacy,
+security, compatibility, and release quality.
+
+This checklist does not cover accounts, login, billing, subscriptions,
+payments, e-commerce, teams, careers, affiliates, testimonials, social
+features, administration, or collaboration.
+
+## Terms
+
+- **Browser storage:** Storage that the browser controls on the current
+  device.
+- **External backup:** A verified file that is outside browser storage.
+- **IndexedDB:** The browser database that stores the local notebook.
+- **HTML:** The markup language that a browser uses to structure a page.
+- **JSON backup:** A user-owned text file that contains the complete notebook.
+- **NVDA:** The NonVisual Desktop Access screen reader.
+- **Restore point:** A saved notebook state that JotKeep can recover.
+- **Safety File:** A user-owned `.jotkeep` file that contains the notebook and
+  its restore points.
+- **Service worker:** The browser process that stores the application files
+  for offline use.
+- **VoiceOver:** The Apple screen reader.
+
+## Source map
+
+The source checklist is
+[Checklist Design](https://www.checklist.design/browse). The relevant source
+groups are:
+
+- Website: [Security](https://www.checklist.design/website/security),
+  [Privacy](https://www.checklist.design/website/legal-privacy), and
+  [404](https://www.checklist.design/website/404)
+- Web app: [Help Center](https://www.checklist.design/web-app/help-center),
+  [Settings](https://www.checklist.design/web-app/settings),
+  [Single Item Detail](https://www.checklist.design/web-app/single-item-detail),
+  [Empty State](https://www.checklist.design/web-app/empty-state),
+  [Onboarding](https://www.checklist.design/web-app/onboarding),
+  [Search Results](https://www.checklist.design/web-app/search-results), and
+  [Version History](https://www.checklist.design/web-app/version-history)
+- Design system:
+  [Accessibility](https://www.checklist.design/design-system/accessibility),
+  [Typography](https://www.checklist.design/design-system/typography),
+  [Spacing and Grid](https://www.checklist.design/design-system/spacing-and-grid),
+  [Color System](https://www.checklist.design/design-system/color-system),
+  [Tokens](https://www.checklist.design/design-system/tokens),
+  [Drawer](https://www.checklist.design/design-system/drawer),
+  [Banner](https://www.checklist.design/design-system/banner),
+  [Toast](https://www.checklist.design/design-system/toast),
+  [Checkbox](https://www.checklist.design/design-system/checkbox),
+  [Radio](https://www.checklist.design/design-system/radio),
+  [Searchbar](https://www.checklist.design/design-system/searchbar),
+  [Tooltip](https://www.checklist.design/design-system/tooltip),
+  [Modal](https://www.checklist.design/design-system/modal),
+  [Loading](https://www.checklist.design/design-system/loading),
+  [Toggle](https://www.checklist.design/design-system/toggle),
+  [Input Field](https://www.checklist.design/design-system/input-field),
+  [Icon](https://www.checklist.design/design-system/icon),
+  [Card](https://www.checklist.design/design-system/card),
+  [Button](https://www.checklist.design/design-system/button), and
+  [Dropdown Menu](https://www.checklist.design/design-system/dropdown-menu)
+- Flows: [Uploading Media](https://www.checklist.design/flows/uploading-media)
+  adapted to local files,
+  [Filtering Items](https://www.checklist.design/flows/filtering-items),
+  [Saving Changes](https://www.checklist.design/flows/saving-changes),
+  [Showing Input Error](https://www.checklist.design/flows/showing-input-error),
+  [Deleting Account](https://www.checklist.design/flows/deleting-account)
+  adapted to local data removal,
+  and [Submitting a Form](https://www.checklist.design/flows/submitting-a-form)
+
+The tasks below adapt these sources to JotKeep. They do not copy generic
+requirements that do not apply to this product.
+
+## 1. Product entry and first use
+
+- [ ] State that JotKeep is a private, plain-text notepad before the first edit.
+- [ ] State that JotKeep does not require an account.
+- [ ] Explain that browser storage is not an external backup.
+- [ ] Put keyboard focus in the empty note body on the first visit.
+- [ ] Show a specific loading message until the notebook and event handlers are ready.
+- [ ] Prevent edits until JotKeep can keep or report each change.
+- [ ] Show a specific failure message if application startup does not finish.
+- [ ] Provide a clear path from the first note to the backup instructions.
+
+## 2. Application shell and navigation
+
+- [ ] Keep one page-level **JotKeep** heading in the accessibility tree.
+- [ ] Show the active note title at the top of the workspace.
+- [ ] Make the notes-panel control show its current expanded state.
+- [ ] Change the notes-panel control label when the panel state changes.
+- [ ] Show an overlay behind the notes panel on narrow screens.
+- [ ] Close the narrow notes panel when the user selects its overlay.
+- [ ] Close the narrow notes panel when the user presses `Escape`.
+- [ ] Move focus to a valid control after the narrow notes panel closes.
+- [ ] Prevent horizontal page scrolling at each supported viewport width.
+- [ ] Keep the title and primary toolbar controls visible at 200% zoom.
+
+## 3. Notes list, search, and organization
+
+- [ ] Make **New note** create one selected blank note.
+- [ ] Show a useful fallback title for an untitled note.
+- [ ] Show a bounded content preview in the detailed note list.
+- [ ] Show the modification time in the detailed note list.
+- [ ] Identify the active note with text or structure in addition to color.
+- [ ] Make note search match titles and note bodies.
+- [ ] Keep the current search query visible while results change.
+- [ ] Show the number of notes that match the current search.
+- [ ] Show a no-results message when note search finds no match.
+- [ ] Provide a direct action that clears a no-results search.
+- [ ] Use a different message when the notebook has no notes to show.
+- [ ] Keep the selected sort order after a reload.
+- [ ] Keep note deletion separate from note selection.
+- [ ] Request confirmation before JotKeep deletes a note.
+
+## 4. Note editor and editing commands
+
+- [ ] Make the note title field edit the active note title.
+- [ ] Treat all note content as plain text.
+- [ ] Show a clear prompt in an empty note body.
+- [ ] Keep the text selection when a command temporarily moves focus.
+- [ ] Make **Undo** and **Redo** use the expected platform behavior.
+- [ ] Make **Cut**, **Copy**, and **Paste** report permission failures.
+- [ ] Make **Select all** select only the active note body.
+- [ ] Make **Find** move to the next or previous literal match.
+- [ ] Make **Find** support case matching and whole-word matching.
+- [ ] Make **Replace** change one selected match without changing other text.
+- [ ] Make **Replace all** report the number of changed matches.
+- [ ] Insert the date, a special character, or an emoji at the saved cursor.
+- [ ] Make the command palette search labels, categories, and related terms.
+- [ ] Update the word and character counts after each edit.
+
+## 5. Automatic save, storage, and status
+
+- [ ] Show **Local: Saving…** while IndexedDB receives a change.
+- [ ] Show **Local: Saved** only after IndexedDB stores the current notebook.
+- [ ] Keep the unsaved state until a failed save succeeds.
+- [ ] Explain a storage failure without hiding the editor.
+- [ ] Give a specific action when browser storage is full.
+- [ ] Give a specific action when IndexedDB is unavailable.
+- [ ] Retry a failed save after the user makes another change.
+- [ ] Keep a bounded recovery journal for the most recent unsaved edit.
+- [ ] Recover a newer journal entry before the user edits the stored note.
+- [ ] Prevent an older tab from overwriting a newer notebook revision.
+- [ ] Report a conflicting change from another JotKeep tab.
+- [ ] Keep local-save status separate from Safety File status.
+- [ ] Keep external-backup status separate from browser-persistence status.
+- [ ] Show the browser-persistence result without calling it a backup.
+
+## 6. Files, backups, and Safety Files
+
+- [ ] Reject a malformed or oversized text file without changing the notebook.
+- [ ] Keep the current note usable while JotKeep reads a text file.
+- [ ] Put only the note body in a downloaded text file.
+- [ ] Describe a browser download as requested until the user verifies the file.
+- [ ] Export every note, timestamp, preference, and active selection in a JSON backup.
+- [ ] Include a format version and integrity check in each JSON backup.
+- [ ] Validate the backup type, version, fields, size, and integrity before import.
+- [ ] Reject an invalid backup before JotKeep changes any local data.
+- [ ] Explain the result of **Merge** before the user confirms it.
+- [ ] Explain the result of **Replace** before the user confirms it.
+- [ ] Keep the notebook unchanged when the user cancels a restore.
+- [ ] Save a restore point before a confirmed backup restore.
+- [ ] Make **Test my backup…** validate a file without changing the notebook.
+- [ ] Show the age of the most recently verified external backup.
+- [ ] Warn when the verified external backup content is more than seven days old.
+- [ ] State that an unencrypted Safety File contains readable note content.
+- [ ] Update a connected Safety File only after the local save succeeds.
+- [ ] Read and verify a connected Safety File after each write.
+- [ ] Show **Backed up** only after the read-back verification succeeds.
+- [ ] Pause automatic Safety File writes after file permission is lost.
+- [ ] Pause automatic writes when another program changes the Safety File.
+- [ ] Explain each Safety File conflict action before the user selects it.
+- [ ] Request explicit confirmation before local data overwrites a Safety File.
+- [ ] Keep the external file unchanged when the user disconnects it.
+- [ ] Provide a Safety File download when direct file access is not available.
+- [ ] Warn before notebook or history size prevents a complete external backup.
+
+## 7. History, recovery, and local data removal
+
+- [ ] List restore points in reverse chronological order.
+- [ ] Show a read-only preview before a history restore.
+- [ ] Let the user select the note in the selected restore point.
+- [ ] Keep history actions disabled while the preview loads.
+- [ ] Report a damaged restore point without changing the notebook.
+- [ ] Explain the difference between **Restore note** and **Restore a copy**.
+- [ ] Request confirmation before a full-notebook restore.
+- [ ] Save the current notebook before each confirmed history restore.
+- [ ] Keep unrelated notes unchanged during a single-note restore.
+- [ ] Explain that local history is not an external backup.
+- [ ] Put **Clear all local data…** in a separated danger area.
+- [ ] State each local data type that the clear operation removes.
+- [ ] State that the clear operation does not delete downloaded files.
+- [ ] Keep all local data when the user cancels the clear operation.
+
+## 8. Menus, dialogs, forms, and feedback
+
+- [ ] Group related File-menu actions with visible separators.
+- [ ] Put destructive menu actions after non-destructive actions.
+- [ ] Keep each menu inside the visible viewport.
+- [ ] Support arrow-key navigation in each application menu.
+- [ ] Return focus to the menu trigger when `Escape` closes the menu.
+- [ ] Give each dialog one clear title.
+- [ ] Give each dialog one visible close or cancel action.
+- [ ] Keep keyboard focus inside an open modal dialog.
+- [ ] Return focus to the opening control after a dialog closes.
+- [ ] Make each radio-option label select its radio control.
+- [ ] Disable a confirmation action until its required data is valid.
+- [ ] Show a specific loading message for a slow dialog action.
+- [ ] Keep an error message next to the action that caused the error.
+- [ ] Use text with each success, warning, and error color.
+- [ ] Keep important feedback visible when the status bar is hidden.
+
+## 9. Appearance, fullscreen mode, and print
+
+- [ ] Provide explicit System, Light, and Dark appearance choices.
+- [ ] Apply the selected theme before the first visible paint.
+- [ ] Keep the selected editor typography after a reload.
+- [ ] Apply editor appearance changes without changing note content.
+- [ ] Make **Reset to defaults** restore every appearance setting.
+- [ ] Keep one visible fullscreen exit control while fullscreen mode is active.
+- [ ] Report a browser rejection of the fullscreen request.
+- [ ] Print the complete active note title and body.
+- [ ] Remove application controls from the print output.
+- [ ] Use black text on a white surface in the print output.
+- [ ] Wrap long lines to the printable page width.
+
+## 10. Offline use, installation, and updates
+
+- [ ] Cache every required application-shell file for offline use.
+- [ ] Open the application offline after one successful online visit.
+- [ ] Keep existing notes editable while the device is offline.
+- [ ] Report a service-worker installation failure to the user.
+- [ ] Provide a retry path after an offline setup failure.
+- [ ] Include valid application icons for regular and maskable installation.
+- [ ] Define a stable application identifier, start path, and scope.
+- [ ] Keep a new service worker waiting while an old application tab is active.
+- [ ] Show **Update ready — refresh** only when the update can activate safely.
+- [ ] Save pending edits before JotKeep activates an accepted update.
+
+## 11. Accessibility and input methods
+
+- [ ] Meet Web Content Accessibility Guidelines level AA for the application.
+- [ ] Keep normal text contrast at 4.5 to 1 or higher.
+- [ ] Keep large-text and control contrast at 3 to 1 or higher.
+- [ ] Show a visible focus indicator on every interactive control.
+- [ ] Keep the focus indicator visible in forced-color mode.
+- [ ] Make every core action available with a keyboard.
+- [ ] Give each icon-only button an accessible name.
+- [ ] Keep decorative icons out of the accessibility tree.
+- [ ] Use native headings in a logical order.
+- [ ] Use native labels for each input, select, and text area.
+- [ ] Use the correct role and state for each menu, listbox, and dialog.
+- [ ] Use one controlled live region for important application results.
+- [ ] Prevent routine save transitions from interrupting screen-reader output.
+- [ ] Preserve a logical reading order when the layout changes.
+- [ ] Keep all content usable at 200% browser zoom.
+- [ ] Keep the application usable at 400% browser zoom on a narrow viewport.
+- [ ] Keep each touch target large enough for reliable selection.
+- [ ] Remove nonessential animation when reduced motion is requested.
+- [ ] Test the core journeys with VoiceOver and Safari.
+- [ ] Test the core journeys with NVDA and Chrome.
+
+## 12. Visual system and component quality
+
+- [ ] Use semantic color tokens instead of raw colors in components.
+- [ ] Define each feedback color for the Light and Dark themes.
+- [ ] Reserve green for verified success states.
+- [ ] Reserve amber for states that need user attention.
+- [ ] Reserve red for failures and destructive actions.
+- [ ] Use the slate accent only for selection and current location.
+- [ ] Use the documented type family for writing, controls, and status data.
+- [ ] Define a minimum readable size for all interface text.
+- [ ] Use the documented spacing scale for layout and component spacing.
+- [ ] Use named, content-based breakpoints for responsive changes.
+- [ ] Use one base shape for each control family.
+- [ ] Give each button a default, hover, focused, pressed, and disabled state.
+- [ ] Use shadows only for menus, dialogs, and the narrow notes drawer.
+- [ ] Keep icon stroke, size, and optical alignment consistent.
+
+## 13. Essential public pages and trust content
+
+- [ ] Publish a privacy page in plain language.
+- [ ] Explain which data stays in browser storage.
+- [ ] Explain when JotKeep can read or write a user-selected file.
+- [ ] Explain how users can remove all local JotKeep data.
+- [ ] State whether the site uses cookies, analytics, or external requests.
+- [ ] Put a last-reviewed date on the privacy page.
+- [ ] Provide a contact method for privacy questions.
+- [ ] Publish a security page in plain language.
+- [ ] Explain the protection limits of browser storage and Safety Files.
+- [ ] Explain that Safety File integrity checks do not provide encryption.
+- [ ] Provide a responsible vulnerability-reporting method.
+- [ ] Keep the security page free of unverified certification claims.
+- [ ] Publish the user guide as accessible help content.
+- [ ] Link related recovery and backup topics to each other.
+- [ ] Create a branded not-found page for an invalid path.
+- [ ] Explain that the requested page does not exist.
+- [ ] Provide a direct link from the not-found page to JotKeep.
+
+## 14. Performance, compatibility, testing, and release
+
+- [ ] Reserve the desktop notes-panel space before the application initializes.
+- [ ] Prevent self-hosted font loading from moving visible content.
+- [ ] Keep note-list previews bounded for large notes.
+- [ ] Avoid whole-notebook work when one note changes.
+- [ ] Keep the editor responsive with the maximum supported notebook size.
+- [ ] Test startup with a slow network and an empty browser cache.
+- [ ] Test the core journeys in the supported Chromium browsers.
+- [ ] Test file fallbacks in browsers without direct file access.
+- [ ] Verify that note content never becomes executable HTML.
+- [ ] Verify that the Content Security Policy permits only required resources.
+- [ ] Serve JotKeep from an origin that no unrelated application uses.
+- [ ] Run all unit and end-to-end tests before release.
+- [ ] Check the browser console for uncaught errors in each core journey.
