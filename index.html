@@ -126,7 +126,9 @@
             type="search"
             placeholder="Search notes…"
             autocomplete="off"
+            aria-describedby="note-search-count"
           />
+          <output id="note-search-count" class="note-search-count" for="note-search" hidden></output>
 
           <div class="list-options">
             <label class="visually-hidden" for="note-sort">Sort notes</label>
@@ -148,7 +150,12 @@
 
         <div class="notes-results">
           <ul id="notes-list" class="notes-list" aria-label="Saved notes"></ul>
-          <p id="notes-empty-state" class="notes-empty-state" role="status" hidden></p>
+          <div id="notes-empty-state" class="notes-empty-state" hidden>
+            <p id="notes-empty-message" role="status"></p>
+            <button id="clear-note-search" class="clear-note-search" type="button">
+              Clear search
+            </button>
+          </div>
         </div>
 
         <footer class="sidebar-footer">

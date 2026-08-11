@@ -115,10 +115,13 @@ const sidebarToggle = document.querySelector("#sidebar-toggle");
 const sidebarBackdrop = document.querySelector("#sidebar-backdrop");
 const newNoteButton = document.querySelector("#new-note");
 const searchInput = document.querySelector("#note-search");
+const noteSearchCount = document.querySelector("#note-search-count");
 const sortSelect = document.querySelector("#note-sort");
 const listViewSelect = document.querySelector("#note-list-view");
 const notesList = document.querySelector("#notes-list");
 const notesEmptyState = document.querySelector("#notes-empty-state");
+const notesEmptyMessage = document.querySelector("#notes-empty-message");
+const clearNoteSearchButton = document.querySelector("#clear-note-search");
 const workspace = document.querySelector(".workspace");
 const findDialog = document.querySelector("#find-dialog");
 const findDialogTitle = document.querySelector("#find-dialog-title");
@@ -667,6 +670,9 @@ function createNoteListItem(savedNote) {
 
 function renderNotes() {
   const matchingNotes = visibleNotes();
+  const query = searchInput.value.trim();
+  const hasQuery = query !== "";
+  const hasNoMatches = hasQuery && matchingNotes.length === 0;
   const fragment = document.createDocumentFragment();
 
   for (const savedNote of matchingNotes) {
@@ -675,11 +681,14 @@ function renderNotes() {
 
   notesList.replaceChildren(fragment);
   notesList.dataset.view = notesDocument.preferences.listView;
-  notesEmptyState.hidden = matchingNotes.length !== 0;
-  notesEmptyState.textContent =
-    matchingNotes.length === 0
-      ? `No notes match “${searchInput.value.trim()}”.`
-      : "";
+  noteSearchCount.hidden = !hasQuery;
+  noteSearchCount.textContent = hasQuery
+    ? pluralizedCount(matchingNotes.length, "matching note", "matching notes")
+    : "";
+  notesEmptyState.hidden = !hasNoMatches;
+  notesEmptyMessage.textContent = hasNoMatches
+    ? `No notes match “${query}”.`
+    : "";
   sortSelect.value = notesDocument.preferences.sortBy;
   listViewSelect.value = notesDocument.preferences.listView;
   noteCountFooter.textContent = `${pluralizedCount(notesDocument.notes.length, "note", "notes")} · local first`;
@@ -3160,6 +3169,12 @@ notesList.addEventListener("click", (event) => {
 });
 
 searchInput.addEventListener("input", renderNotes);
+
+clearNoteSearchButton.addEventListener("click", () => {
+  searchInput.value = "";
+  renderNotes();
+  searchInput.focus();
+});
 
 sortSelect.addEventListener("change", async () => {
   notesDocument = updatePreferences(notesDocument, { sortBy: sortSelect.value });

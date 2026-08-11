@@ -116,11 +116,11 @@ requirements that do not apply to this product.
 - [ ] Show a bounded content preview in the detailed note list.
 - [ ] Show the modification time in the detailed note list.
 - [ ] Identify the active note with text or structure in addition to color.
-- [ ] Make note search match titles and note bodies.
-- [ ] Keep the current search query visible while results change.
-- [ ] Show the number of notes that match the current search.
-- [ ] Show a no-results message when note search finds no match.
-- [ ] Provide a direct action that clears a no-results search.
+- [x] Make note search match titles and note bodies.
+- [x] Keep the current search query visible while results change.
+- [x] Show the number of notes that match the current search.
+- [x] Show a no-results message when note search finds no match.
+- [x] Provide a direct action that clears a no-results search.
 - [ ] Use a different message when the notebook has no notes to show.
 - [ ] Keep the selected sort order after a reload.
 - [ ] Keep note deletion separate from note selection.
